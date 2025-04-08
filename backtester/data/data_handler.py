@@ -1,37 +1,31 @@
 import pandas as pd
 import numpy as np
-
+from backtester.api.api_client import APIClient
+from backtester.data.data_source import data_source
 class DataHandler:
-    def __init__(self, source: str, symbol: str, timeframe: str = '15m'):
-        """
-        Initialize the DataHandler.
-
-        :param source: Path to the CSV data file (or a data source identifier).
-        :param symbol: Trading pair symbol (e.g., BTC/USDT).
-        :param timeframe: Data timeframe (default '15m').
-        """
-        self.source = source
-        self.symbol = symbol
-        self.timeframe = timeframe
+    def __init__(self, source_key: str, endpoint_key: str):
+        self.source_config = data_source[source_key]
+        self.endpoint_key = endpoint_key
+        self.api_client = APIClient(base_url=data_source['base_url'], api_key=data_source["api_key"])
         self.data = pd.DataFrame()
 
     def load_data(self):
-        """
-        Load data from a CSV file or other source.
-        Expected CSV columns: timestamp, open, high, low, close, volume
-
-        This method converts timestamp column to datetime and sets it as index.
-        """
         try:
-            # TODO: Change this to call API and get data
-            self.data = pd.read_csv(self.source)
+            endpoint = self.source_config["endpoints"][self.endpoint_key]
+            response = self.api_client.get(endpoint)
+
+            self.data = pd.DataFrame(response['data']) if 'data' in response else pd.DataFrame(response)
+
             if 'timestamp' in self.data.columns:
                 self.data['timestamp'] = pd.to_datetime(self.data['timestamp'])
                 self.data.set_index('timestamp', inplace=True)
             self.data.sort_index(inplace=True)
-            print(f"✅ Data loaded successfully from {self.source}.")
+
+            print(" Data loaded and indexed.")
         except Exception as e:
-            print(f"Error loading data: {e}")
+            print(f" Error loading data: {e}")
+
+
 
     def clean_data(self):
         """
