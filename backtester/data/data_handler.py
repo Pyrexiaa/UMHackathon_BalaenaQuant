@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 from backtester.api.api_client import APIClient
 from backtester.data.data_source import data_source
+import cybotrade_datasource
+from datetime import datetime, timezone
+
 class DataHandler:
     def __init__(self, source_key: str, endpoint_key: str):
         self.source_config = data_source[source_key]
@@ -24,6 +27,28 @@ class DataHandler:
             print(" Data loaded and indexed.")
         except Exception as e:
             print(f" Error loading data: {e}")
+            
+    async def extract_features(self, topic_endpoint: str):
+  
+        try:
+            # # read UM_datathon_2024.csv and extract the column header into a list
+            # df = pd.read_csv("backtester/data/UM_datathon_2024.csv")
+            # # Extract the column names
+            # column_names = df.columns.tolist()
+            # print(column_names)
+            
+            data = await cybotrade_datasource.query_paginated(
+            api_key=data_source["api_key"], 
+            topic=topic_endpoint, 
+            start_time=datetime(year=2024, month=1, day=1, tzinfo=timezone.utc),
+            end_time=datetime(year=2025, month=1, day=1, tzinfo=timezone.utc))
+        
+            self.data = pd.DataFrame(data)
+            print(self.data)
+            
+            
+        except Exception as e:
+            print(f"Error extracting features: {e}")
 
 
 
@@ -88,6 +113,14 @@ class DataHandler:
         Get the processed DataFrame.
         """
         return self.data
+    
+    def reset_data(self):
+        """
+        Reset the data to an empty DataFrame.
+        """
+        self.data = pd.DataFrame()
+        print(self.data)
+        print("Data reset to an empty DataFrame.")
 
     def run(self):
         """
