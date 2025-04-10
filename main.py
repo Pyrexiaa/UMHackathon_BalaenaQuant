@@ -1,9 +1,9 @@
 import os
 from dotenv import load_dotenv
-from backtester.data.data_handler import DataHandler
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from backtester.data.data_source import feature_topic_dict
+from src.data.data_handler import DataHandler
+from src.data.data_source import feature_topic_dict
 import pandas as pd
 import numpy as np
 # Load environment variables
