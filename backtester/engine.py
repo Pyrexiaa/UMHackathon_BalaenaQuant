@@ -1,6 +1,6 @@
 from typing import Optional
 import pandas as pd
-from strategy_base import Strategy
+from strategy.strategy_base import Strategy
 from portfolio import Portfolio
 from metrics import calculate_metrics
 import numpy as np

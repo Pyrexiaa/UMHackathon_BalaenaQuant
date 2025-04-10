@@ -40,8 +40,8 @@ class DataHandler:
             data = await cybotrade_datasource.query_paginated(
             api_key=data_source["api_key"], 
             topic=topic_endpoint, 
-            start_time=datetime(year=2024, month=1, day=1, tzinfo=timezone.utc),
-            end_time=datetime(year=2025, month=1, day=1, tzinfo=timezone.utc))
+            start_time=datetime(year=2020, month=1, day=1, tzinfo=timezone.utc),
+            end_time=datetime(year=2025, month=3, day=31, tzinfo=timezone.utc))
         
             self.data = pd.DataFrame(data)
             print(self.data)
