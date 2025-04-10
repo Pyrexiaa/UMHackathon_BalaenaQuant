@@ -1,0 +1,26 @@
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+
+# Ignore environment-specific files
+*.env
+*.venv
+*.virtualenv
+*.conda
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+
+# Ignore log files
+*.log
+
+# Ignore output files
+output/
+
+# Ignore local databases
+*.sqlite3
+
+# Ignore virtual environment directory (if named 'env' or 'venv')
+env/
+venv/
