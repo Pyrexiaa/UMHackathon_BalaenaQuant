@@ -1,1 +1,1 @@
-["delta_estimated_leverage_ratio", "close_7d_ma", "close_30d_std", "volume_zscore", "taker_buy_ratio", "open_interest"]
+["delta_estimated_leverage_ratio", "whale_ratio_diff", "close_7d_ma", "close_30d_std", "volume_zscore", "taker_buy_ratio", "open_interest", "price_range", "price_momentum", "price_return_ratio", "net_address_flow", "net_transaction_flow", "transfer_skew", "net_liquidations_usd", "fees_transaction_mean_usd"]
