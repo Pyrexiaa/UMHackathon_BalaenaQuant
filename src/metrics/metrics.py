@@ -1,7 +1,7 @@
 from base_metrics import BaseMetrics
 import numpy as np
 
-class DefaultMetrics(BaseMetrics):
+class Metrics(BaseMetrics):
     def total_return(self):
         """Total return over the entire period."""
         return self.equity.iloc[-1] / self.equity.iloc[0] - 1
@@ -93,20 +93,18 @@ class DefaultMetrics(BaseMetrics):
         }
 
     def all_metrics(self):
-        """Returns a dictionary of all calculated metrics."""
-        metrics = {
+        return {
             'Total Return': self.total_return(),
-            'Adjusted Returns': self.adjusted_returns(),
             'Annualized Return': self.annualized_return(),
-            'Annualized Volatility': self.annualized_volatility(),
             'Sharpe Ratio': self.sharpe_ratio(),
             'Sortino Ratio': self.sortino_ratio(),
             'Max Drawdown': self.max_drawdown(),
-            'Drawdown Duration (bars)': self.drawdown_duration(),
-            'Calmar Ratio': self.calmar_ratio()
+            'Calmar Ratio': self.calmar_ratio(),
+            **self.trade_metrics()
         }
 
-        if self.trades is not None:
-            metrics.update(self.trade_metrics())
-
-        return metrics
+    def get_metrics(self, names: list = None) -> dict:
+        all_metrics = self.all_metrics()
+        if names is None:
+            return all_metrics
+        return {k: all_metrics[k] for k in names if k in all_metrics}

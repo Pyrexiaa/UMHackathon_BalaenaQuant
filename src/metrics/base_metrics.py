@@ -26,3 +26,10 @@ class BaseMetrics(ABC):
     def all_metrics(self) -> dict:
         """Return a dictionary of all metrics."""
         pass
+
+    def get_metrics(self, names: list = None) -> dict:
+        """Return selected metrics."""
+        all_metrics = self.all_metrics()
+        if names is None:
+            return all_metrics
+        return {k: all_metrics[k] for k in names if k in all_metrics}
