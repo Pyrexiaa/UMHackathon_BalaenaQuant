@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+CryptoAlphaLab - Feature Engineering Module
+
+This module provides functions for generating advanced features for cryptocurrency trading.
+"""
+
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
@@ -5,122 +13,277 @@ from sklearn.preprocessing import StandardScaler
 import warnings
 from hmmlearn import hmm
 
-class FeatureTechnicalIndicators:
-    def __init__(self, df: pd.DataFrame, price_col: str = 'close'):
-        self.df = df
-        self.price_col = price_col
-        
-    def add_sma(self, windows: List[int] = [50, 200]):
-        """Add Simple Moving Averages (SMA) to the dataframe.
-        
-        Args:
-            windows (List[int], optional): List of window sizes for SMA calculation. Defaults to [50, 200] which can be used for Golden Cross & Death Cross strategy.
-        Raises:
-            ValueError: If window size is not positive or exceeds the length of the dataframe.   
-        """
-        for window in windows:
-            # Calculate SMA
-            if window <= 0:
-                raise ValueError("Window size must be positive")
-            if window > len(self.df):
-                raise ValueError("Window size must be less than or equal to the length of the dataframe")
-            else:
-                # Calculate SMA
-                self.df[f'sma_{window}'] = self.df[self.price_col].rolling(window=window).mean()
-                
-            # can apply Golden Cross & Death Cross strategy 
-            # https://www.investopedia.com/terms/g/goldencross.asp
+def add_technical_indicators(df: pd.DataFrame, 
+                           timeframe: str = '1d',
+                           custom_windows: Optional[Dict[str, List[int]]] = None,
+                           add_sma: bool = True,
+                           add_ema: bool = True,
+                           add_rsi: bool = True,
+                           add_macd: bool = True,
+                           add_bbands: bool = True,
+                           add_volatility: bool = True,
+                           add_volume_indicators: bool = True,
+                           add_price_channels: bool = True,
+                           add_momentum: bool = True) -> pd.DataFrame:
+    """
+    Add technical indicators to the dataframe based on specified timeframe.
     
+    Parameters:
+    ----------
+    df : pd.DataFrame
+        DataFrame containing price data
+    timeframe : str
+        Time interval of data. Options: '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'
+    custom_windows : Dict[str, List[int]], optional
+        Custom window sizes for different indicators
+        Example: {'sma': [5, 10, 20], 'rsi': [7, 14, 21]}
+        If None, default windows will be used based on timeframe.
+    add_sma : bool
+        Whether to add Simple Moving Averages
+    add_ema : bool
+        Whether to add Exponential Moving Averages
+    add_rsi : bool
+        Whether to add Relative Strength Index
+    add_macd : bool
+        Whether to add Moving Average Convergence Divergence
+    add_bbands : bool
+        Whether to add Bollinger Bands
+    add_volatility : bool
+        Whether to add volatility indicators
+    add_volume_indicators : bool
+        Whether to add volume-based indicators
+    add_price_channels : bool
+        Whether to add price channel indicators
+    add_momentum : bool
+        Whether to add momentum indicators
     
-    def add_ema(self, windows: List[int] = [5, 8, 13]):
-        """Add Exponential Moving Averages (EMA) to the dataframe. 5-8-13 EMA strategy is implemented to identify trends and potential entry/exit points.
+    Returns:
+    -------
+    pd.DataFrame
+        DataFrame with added technical indicators
+    """
+    # Make a copy to avoid modifying the original dataframe
+    result_df = df.copy()
+    
+    # Map timeframe to appropriate window sizes
+    timeframe_window_map = {
+        '1m': {'short': [5, 10, 15], 'medium': [30, 60], 'long': [120, 240]}, 
+        '5m': {'short': [3, 6, 12], 'medium': [24, 48], 'long': [96, 192]},
+        '15m': {'short': [4, 8], 'medium': [16, 32], 'long': [64, 96]},
+        '30m': {'short': [4, 8], 'medium': [16, 24], 'long': [48, 96]},
+        '1h': {'short': [6, 12], 'medium': [24, 48], 'long': [72, 168]},
+        '4h': {'short': [3, 6], 'medium': [12, 24], 'long': [36, 72]},
+        '1d': {'short': [5, 10, 20], 'medium': [50, 100], 'long': [200]},
+        '1w': {'short': [4, 8], 'medium': [26], 'long': [52]}
+    }
+    
+    # Use custom windows if provided, otherwise use the mapped windows
+    if not custom_windows:
+        if timeframe not in timeframe_window_map:
+            warnings.warn(f"Unknown timeframe: {timeframe}. Using default daily windows.")
+            windows = timeframe_window_map['1d']
+        else:
+            windows = timeframe_window_map[timeframe]
+    else:
+        windows = custom_windows
+    
+    price_col = 'close'
+    open_col = 'open'
+    high_col = 'high'
+    low_col = 'low'
+    volume_col = 'volume'
+    
+    # 1. Price-based Indicators
+    # ==============================
+    
+    # Simple Moving Averages (SMAs)
+    if add_sma:
+        sma_windows = windows.get('sma', windows['short'] + windows['medium'] + windows['long'])
+        for window in sma_windows:
+            result_df[f'sma_{window}'] = result_df[price_col].rolling(window=window).mean()
+            # Calculate SMA crossovers and divergence
+            if window in windows['short'] and windows['medium']:
+                med_window = windows['medium'][0]
+                result_df[f'sma_cross_{window}_{med_window}'] = np.where(
+                    result_df[f'sma_{window}'] > result_df[f'sma_{med_window}'], 1, -1)
+    
+    # Exponential Moving Averages (EMAs)
+    if add_ema:
+        ema_windows = windows.get('ema', windows['short'] + windows['medium'])
+        for window in ema_windows:
+            result_df[f'ema_{window}'] = result_df[price_col].ewm(span=window, adjust=False).mean()
         
-        Args:
-            windows (List[int], optional): List of window sizes for EMA calculation. Defaults to [5, 8, 13] which is used for 5-8-13 EMA strategy.
-        Raises:
-            ValueError: If window size is not positive or exceeds the length of the dataframe.        
-        """
-        for window in windows:
-            # Calculate EMA
-            if window <= 0:
-                raise ValueError("Window size must be positive")
-            if window > len(self.df):
-                raise ValueError("Window size must be less than or equal to the length of the dataframe")
-            else:
-                # Calculate EMA
-                self.df[f'ema_{window}'] = self.df[self.price_col].ewm(span=window, adjust=False).mean()
-        
-        ## 5-8-13 EMA strategy https://www.investopedia.com/articles/active-trading/010116/perfect-moving-averages-day-trading.asp#:~:text=For%20day%20traders%20seeking%20a,traders%20across%20diverse%20market%20conditions.
-        # Buy when the 5 EMA crosses above both the 8 and 13 EMAs
-        # Sell when the 5 EMA crosses below both the 8 and 13 EMAs
-        if 'ema_5' in self.df.columns and 'ema_8' in self.df.columns and 'ema_13' in self.df.columns:
-            # Calculate EMA crossovers
-            self.df['ema_5_8_13_cross'] = 0
-            self.df.loc[(self.df['ema_5'] > self.df['ema_8']) & (self.df['ema_8'] > self.df['ema_13']), 'ema_5_8_13_cross'] = 1
-            self.df.loc[(self.df['ema_5'] < self.df['ema_8']) & (self.df['ema_8'] < self.df['ema_13']), 'ema_5_8_13_cross'] = -1
-                    
-        
-    def add_rsi(self, windows: List[int] = [14]):
-        """Add Relative Strength Index (RSI) to the dataframe.
-        Args:
-            windows (List[int], optional): List of window sizes for RSI calculation. Defaults to [14]. As the standard number of periods used to calculate the initial RSI value is 14.
-        """
-        for window in windows:
-            # Calculate RSI
-            delta = self.df[self.price_col].diff()
+        # Calculate EMA crossovers
+        if len(ema_windows) >= 2:
+            short_ema = ema_windows[0]
+            long_ema = ema_windows[-1]
+            result_df[f'ema_cross_{short_ema}_{long_ema}'] = np.where(
+                result_df[f'ema_{short_ema}'] > result_df[f'ema_{long_ema}'], 1, -1)
+    
+    # Relative Strength Index (RSI)
+    if add_rsi:
+        rsi_windows = windows.get('rsi', [14])
+        for window in rsi_windows:
+            delta = result_df[price_col].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
             
             # Calculate RSI
             rs = gain / loss
-            self.df[f'rsi_{window}'] = 100 - (100 / (1 + rs))
+            result_df[f'rsi_{window}'] = 100 - (100 / (1 + rs))
             
-            # Add RSI signals when RSI crosses above 70 (overbought = sell) or below 30 (oversold = buy)
-            # https://www.investopedia.com/terms/r/rsi.asp
-            self.df[f'rsi_{window}_signal'] = 0
-            self.df.loc[self.df[f'rsi_{window}'] > 70, f'rsi_{window}_signal'] = -1 # Bearish signal 
-            self.df.loc[self.df[f'rsi_{window}'] < 30, f'rsi_{window}_signal'] = 1 # Bullish signal 
+            # Add RSI crossover signals
+            result_df[f'rsi_{window}_overbought'] = np.where(result_df[f'rsi_{window}'] > 70, 1, 0)
+            result_df[f'rsi_{window}_oversold'] = np.where(result_df[f'rsi_{window}'] < 30, 1, 0)
+    
+    # MACD (Moving Average Convergence Divergence)
+    if add_macd:
+        macd_params = windows.get('macd', {'fast': 12, 'slow': 26, 'signal': 9})
+        fast = macd_params['fast']
+        slow = macd_params['slow']
+        signal_period = macd_params['signal']
+        
+        # Calculate MACD components
+        ema_fast = result_df[price_col].ewm(span=fast, adjust=False).mean()
+        ema_slow = result_df[price_col].ewm(span=slow, adjust=False).mean()
+        result_df['macd_line'] = ema_fast - ema_slow
+        result_df['macd_signal'] = result_df['macd_line'].ewm(span=signal_period, adjust=False).mean()
+        result_df['macd_histogram'] = result_df['macd_line'] - result_df['macd_signal']
+        
+        # MACD crossover signal
+        result_df['macd_crossover'] = np.where(
+            result_df['macd_line'] > result_df['macd_signal'], 1, -1)
+    
+    # Bollinger Bands
+    if add_bbands:
+        bb_windows = windows.get('bbands', [20])
+        for window in bb_windows:
+            # Calculate Bollinger Bands
+            result_df[f'bb_middle_{window}'] = result_df[price_col].rolling(window=window).mean()
+            result_df[f'bb_std_{window}'] = result_df[price_col].rolling(window=window).std()
+            result_df[f'bb_upper_{window}'] = result_df[f'bb_middle_{window}'] + 2 * result_df[f'bb_std_{window}']
+            result_df[f'bb_lower_{window}'] = result_df[f'bb_middle_{window}'] - 2 * result_df[f'bb_std_{window}']
             
-    def add_macd(self, fast_window: int = 12, slow_window: int = 26, signal_window: int = 9):
-        """Add Moving Average Convergence Divergence (MACD) to the dataframe.
-        Args:
-            fast_window (int, optional): Fast EMA window size. Defaults to 12.
-            slow_window (int, optional): Slow EMA window size. Defaults to 26.
-            signal_window (int, optional): Signal line window size. Defaults to 9.
-        """
-        # Calculate MACD
-        ema_fast = self.df[self.price_col].ewm(span=fast_window, adjust=False).mean()
-        ema_slow = self.df[self.price_col].ewm(span=slow_window, adjust=False).mean()
-        self.df['macd'] = ema_fast - ema_slow # EMA 12 - EMA 26
-        self.df['macd_signal'] = self.df['macd'].ewm(span=signal_window, adjust=False).mean()
-        # self.df['macd_histogram'] = self.df['macd'] - self.df['macd_signal'] # used for visualize momentum
+            # Add BB width and %B indicator
+            result_df[f'bb_width_{window}'] = (result_df[f'bb_upper_{window}'] - result_df[f'bb_lower_{window}']) / result_df[f'bb_middle_{window}']
+            result_df[f'bb_pct_b_{window}'] = (result_df[price_col] - result_df[f'bb_lower_{window}']) / (result_df[f'bb_upper_{window}'] - result_df[f'bb_lower_{window}'])
+            
+            # BB signals
+            result_df[f'bb_upper_cross_{window}'] = np.where(result_df[price_col] > result_df[f'bb_upper_{window}'], 1, 0)
+            result_df[f'bb_lower_cross_{window}'] = np.where(result_df[price_col] < result_df[f'bb_lower_{window}'], 1, 0)
+    
+    # 2. Volatility Indicators
+    # ==============================
+    if add_volatility and high_col in df.columns and low_col in df.columns:
+        # ATR (Average True Range)
+        atr_windows = windows.get('volatility', [14]) 
         
-        # macd > macd_signal = bullish signal 1, macd < macd_signal = bearish signal -1
-        self.df['macd_signal_flag'] = 0
-        self.df['macd_signal_flag'] = self.df.apply(lambda row: 1 if row['macd'] > row['macd_signal'] else (-1 if row['macd'] < row['macd_signal'] else 0), axis=1)
+        for window in atr_windows:
+            # True Range
+            high_low = result_df[high_col] - result_df[low_col]
+            high_close = np.abs(result_df[high_col] - result_df[price_col].shift())
+            low_close = np.abs(result_df[low_col] - result_df[price_col].shift())
+            ranges = pd.concat([high_low, high_close, low_close], axis=1)
+            true_range = np.max(ranges, axis=1)
+            
+            # Average True Range (ATR)
+            result_df[f'atr_{window}'] = true_range.rolling(window).mean()
+            
+            # ATR percent
+            result_df[f'atr_pct_{window}'] = result_df[f'atr_{window}'] / result_df[price_col] * 100
+            
+            # Historical Volatility (close-to-close)
+            ln_returns = np.log(result_df[price_col] / result_df[price_col].shift(1))
+            result_df[f'volatility_{window}'] = ln_returns.rolling(window).std() * np.sqrt(252)  # Annualized
+    
+    # Price change
+    result_df['price_change_1'] = result_df[price_col].pct_change()
+    result_df['price_change_5'] = result_df[price_col].pct_change(periods=5)
+    result_df['price_change_10'] = result_df[price_col].pct_change(periods=10)
+    
+    # 3. Volume Indicators
+    # ==============================
+    if add_volume_indicators and volume_col and volume_col in df.columns:
+        vol_windows = windows.get('volume', [5, 20])
         
-        # trade_signal 2 = golden cross (buy), trade_signal -2 = death cross (sell)
-        self.df['macd_trade_signal'] = self.df['macd_signal_flag'].diff()
+        # Volume SMAs
+        for window in vol_windows:
+            result_df[f'volume_sma_{window}'] = result_df[volume_col].rolling(window=window).mean()
         
-        # Add MACD crossover signals
-        # Buy when the MACD line crosses above the signal line, Sell when the MACD line crosses below the signal line
-        # https://www.investopedia.com/terms/m/macd.asp
-        self.df['macd_signal'] = 0
-        self.df.loc[(self.df['macd'] > self.df['macd_signal']), 'macd_signal'] = 1
+        # Volume Oscillator
+        if len(vol_windows) >= 2:
+            short_vol = vol_windows[0]
+            long_vol = vol_windows[-1]
+            result_df['volume_oscillator'] = (
+                (result_df[f'volume_sma_{short_vol}'] - result_df[f'volume_sma_{long_vol}']) / 
+                result_df[f'volume_sma_{long_vol}'] * 100
+            )
         
-        # drop the columns 'macd_signal' and 'macd_signal_flag'
-        self.df.drop(columns=['macd_signal', 'macd_signal_flag'], inplace=True)
+        # Money Flow Volume (MFV)
+        typical_price = (result_df[high_col] + result_df[low_col] + result_df[price_col]) / 3
+        raw_money_flow = typical_price * result_df[volume_col]
         
-    def add_price_change(self, windows: List[int] = [1]):
-        """Add price change features to the dataframe.
-        Args:
-            windows (List[int], optional): List of window sizes for price change calculation. Defaults to [1].
-        """
-        for window in windows:
-            # Calculate price change
-            self.df[f'price_change_{window}'] = self.df[self.price_col].pct_change(periods=window)    
-
-
+        # Money Flow Direction
+        money_flow_direction = np.where(typical_price > typical_price.shift(1), 1, -1)
+        money_flow = raw_money_flow * money_flow_direction
+        
+        # Money Flow Index
+        mfi_period = windows.get('mfi', [14])[0]
+        positive_flow = money_flow.where(money_flow > 0, 0).rolling(window=mfi_period).sum()
+        negative_flow = abs(money_flow.where(money_flow < 0, 0)).rolling(window=mfi_period).sum()
+        
+        money_ratio = positive_flow / negative_flow
+        result_df['mfi'] = 100 - (100 / (1 + money_ratio))
+        
+        # On-Balance Volume (OBV)
+        obv = (np.sign(result_df[price_col].diff()) * result_df[volume_col]).fillna(0)
+        result_df['obv'] = obv.cumsum()
+        
+        # Chaikin Money Flow
+        cmf_period = windows.get('cmf', [20])[0]
+        money_flow_volume = ((result_df[price_col] - result_df[low_col]) - (result_df[high_col] - result_df[price_col])) / (result_df[high_col] - result_df[low_col]) * result_df[volume_col]
+        result_df['cmf'] = money_flow_volume.rolling(cmf_period).sum() / result_df[volume_col].rolling(cmf_period).sum()
+    
+    # 4. Price Channels
+    # ==============================
+    if add_price_channels:
+        pc_windows = windows.get('price_channels', [20])
+        
+        for window in pc_windows:
+            # Donchian Channels
+            result_df[f'upper_channel_{window}'] = result_df[high_col].rolling(window=window).max()
+            result_df[f'lower_channel_{window}'] = result_df[low_col].rolling(window=window).min()
+            result_df[f'middle_channel_{window}'] = (result_df[f'upper_channel_{window}'] + result_df[f'lower_channel_{window}']) / 2
+            
+            # Breakout signals
+            result_df[f'upper_breakout_{window}'] = np.where(result_df[price_col] > result_df[f'upper_channel_{window}'].shift(1), 1, 0)
+            result_df[f'lower_breakout_{window}'] = np.where(result_df[price_col] < result_df[f'lower_channel_{window}'].shift(1), 1, 0)
+    
+    # 5. Momentum Indicators
+    # ==============================
+    if add_momentum:
+        # Rate of Change
+        roc_periods = windows.get('roc', [5, 10, 20])
+        for period in roc_periods:
+            result_df[f'roc_{period}'] = (
+                (result_df[price_col] - result_df[price_col].shift(period)) / 
+                result_df[price_col].shift(period) * 100
+            )
+        
+        # Stochastic Oscillator
+        stoch_period = windows.get('stochastic', [14])[0]
+        result_df['stoch_k'] = 100 * ((result_df[price_col] - result_df[low_col].rolling(window=stoch_period).min()) / 
+                                     (result_df[high_col].rolling(window=stoch_period).max() - 
+                                      result_df[low_col].rolling(window=stoch_period).min()))
+        result_df['stoch_d'] = result_df['stoch_k'].rolling(window=3).mean()
+        
+        # Commodity Channel Index (CCI)
+        cci_period = windows.get('cci', [20])[0]
+        typical_price = (result_df[high_col] + result_df[low_col] + result_df[price_col]) / 3
+        mean_dev = np.abs(typical_price - typical_price.rolling(window=cci_period).mean()).rolling(window=cci_period).mean()
+        result_df['cci'] = (typical_price - typical_price.rolling(window=cci_period).mean()) / (0.015 * mean_dev)
+    
+    return result_df
 
 
 def add_hmm_features(df: pd.DataFrame, 
