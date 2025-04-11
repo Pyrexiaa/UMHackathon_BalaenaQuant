@@ -156,7 +156,6 @@ class XGBoostTradingModel:
         )
 
     def predict_signals(self, X, buy_thresh=0.15, sell_thresh=0.15):
-        """Generate trading signals from probabilities"""
         probs = self.model.predict_proba(X)
         signals = []
         for p in probs:
@@ -166,7 +165,12 @@ class XGBoostTradingModel:
                 signals.append(-1)
             else:
                 signals.append(0)
-        return np.array(signals)
+        signals = np.array(signals)
+    
+    # Return both features and predicted signals as a DataFrame
+        df_signals = pd.DataFrame(X, columns=self.features)
+        df_signals['predicted_signal'] = signals
+        return df_signals
 
     def backtest(self, df, signals):
         """Backtest trading strategy"""
@@ -276,19 +280,25 @@ def main():
         X_train, X_val, X_test, y_train, y_val, y_test = model.prepare_features(train, val, test)
         model.train_model(X_train, y_train, X_val, y_val)
     
-    # Validation
-        val_signals = model.predict_signals(X_val)
-        val_equity, val_trades = model.backtest(val, val_signals)
+        # Validation
+        val_signals_df = model.predict_signals(X_val)  # Get DataFrame with predicted signals
+        print("\nValidation Signals DataFrame:")
+        print(val_signals_df.head())  # Display the first few rows of the DataFrame
+        
+        val_equity, val_trades = model.backtest(val, val_signals_df['predicted_signal'])
         model.evaluate_performance(val_equity, val_trades, "Validation")
-        model.plot_results(val, val_equity, val_signals, "validation")
+        model.plot_results(val, val_equity, val_signals_df['predicted_signal'], "validation")
     
-    # Test
-        test_signals = model.predict_signals(X_test)
-        test_equity, test_trades = model.backtest(test, test_signals)
+        # Test
+        test_signals_df = model.predict_signals(X_test)  # Get DataFrame with predicted signals
+        print("\nTest Signals DataFrame:")
+        print(test_signals_df.head())  # Display the first few rows of the DataFrame
+        
+        test_equity, test_trades = model.backtest(test, test_signals_df['predicted_signal'])
         model.evaluate_performance(test_equity, test_trades, "Test")
-        model.plot_results(test, test_equity, test_signals, "test")
+        model.plot_results(test, test_equity, test_signals_df['predicted_signal'], "test")
     
-    # Save model
+        # Save model
         model.save_model()
         print("\nModel training and evaluation complete!")
 
