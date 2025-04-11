@@ -3,26 +3,47 @@ import torch.nn as nn
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from .config import (
     BATCH_SIZE,
     EPOCHS,
     LR,
+    WEIGHT_DECAY,
     WINDOW_SIZE,
     LOSS_FUNCTION,
     SCALING_PATH,
-    OUTPUT_PATH,
-    EVALUATE_PATH
+    MODEL_OUTPUT_PATH,
+    MODEL_OUTPUT_FILE_PATH,
+    TRADING_OUTPUT_FILE_PATH,
+    EVALUATE_PATH,
+    FEE_RATE,
+    SELL_SIGNAL,
+    BUY_SIGNAL,
+    HOLD_SIGNAL,
+    SELECTED_FEATURES
 )
 from .model_architecture import CryptoCNN
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 from joblib import dump, load
-from torch.nn.functional import softmax
+
+def calculate_class_distribution(y_train):
+    y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+    class_counts = torch.bincount(y_train_tensor)  # Counts of each class in the training labels
+    total_samples = len(y_train_tensor)
+    class_freq = class_counts.float() / total_samples  # Normalize counts by total samples
+
+    # Calculate class weights (inverse of class frequency)
+    class_weights = 1.0 / class_freq  # Inverse of frequency
+    class_weights = class_weights / class_weights.sum()  # Normalize so they sum to 1
+
+    # Convert to a tensor and ensure it's of float type
+    class_weights = class_weights.float()
+    return class_weights
 
 # --- Load CSV ---
 def load_csv(df_path):
     df = pd.read_csv(df_path)
+    df = df[SELECTED_FEATURES]
     
     # Keep and parse datetime
     df["datetime"] = pd.to_datetime(df["datetime"])
@@ -94,7 +115,7 @@ def convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test):
     return train_loader, val_loader, X_test, y_test
 
 # --- Training Loop ---
-def train_model(model, train_loader, val_loader, optimizer):
+def train_model(model, train_loader, val_loader, optimizer, loss_criterion):
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
@@ -102,7 +123,7 @@ def train_model(model, train_loader, val_loader, optimizer):
             batch_y = torch.argmax(batch_y, dim=1)
             optimizer.zero_grad()
             logits = model(batch_x)
-            loss = LOSS_FUNCTION(logits, batch_y)
+            loss = loss_criterion(logits, batch_y)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -115,41 +136,175 @@ def train_model(model, train_loader, val_loader, optimizer):
             for val_x, val_y in val_loader:
                 val_y = torch.argmax(val_y, dim=1)
                 val_preds = model(val_x)
-                val_loss += LOSS_FUNCTION(val_preds, val_y).item()
+                val_loss += loss_criterion(val_preds, val_y).item()
 
         avg_train_loss = total_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
 
-        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_train_loss} - Val Loss: {avg_val_loss}")
 
     return model
+
+def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
+    """
+    Convert class probabilities into trading signals:
+    - class 0 (buy): prob > buy_thresh → 0.30
+    - class 2 (sell): prob > sell_thresh → 0.30
+    - class 1 (hold): prob > hold_thresh → 0.40
+    """
+    signals = []
+    for p in probs:
+        p = np.array(p)
+        if p[0] > buy_thresh:
+            signals.append(BUY_SIGNAL)  # Buy
+        elif p[2] > sell_thresh:
+            signals.append(SELL_SIGNAL)  # Sell
+        else:
+            signals.append(HOLD_SIGNAL)  # Hold
+    return np.array(signals)
+
+def backtest(df, signals):
+    """Backtest strategy based on trading signals."""
+    capital = 1000000
+    position = 0
+    entry_price = 0
+    prev_signal = 0
+    equity = []
+    trades = []
+    pnl_list = []
+    pos_list = []
+    capital_list = []
+    trades_flag = []
+
+
+    for i in range(len(signals)):
+        price = df.iloc[i]["close"]
+        pnl = 0
+        trade_occurred = 0
+
+        # Exit condition
+        if position != 0 and signals[i] != prev_signal:
+            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            capital += pnl
+            trades.append(pnl)
+            position = 0  # Close position
+            trade_occurred = 1  # Trade happened
+
+        # Entry condition
+        if signals[i] != 0 and position == 0:
+            entry_price = price
+            position = (capital // price) * signals[i]
+            capital -= abs(position * price) * FEE_RATE
+            prev_signal = signals[i]
+
+        # Logging per step
+        current_equity = capital + position * price
+        equity.append(current_equity)
+        pnl_list.append(pnl)
+        pos_list.append(position)
+        capital_list.append(capital)
+        trades_flag.append(trade_occurred)
+
+    result_df = df.copy().reset_index(drop=True)
+    result_df["signal"] = signals
+    result_df["equity"] = equity
+    result_df["pnl"] = pnl_list
+    result_df["capital"] = capital_list
+    result_df["position"] = pos_list
+    result_df["trades"] = trades_flag  # 1 if a trade happened, else 0
+    result_df.to_csv(TRADING_OUTPUT_FILE_PATH, index=False)
+
+    return np.array(equity), trades
+
+
+def evaluate_performance(equity, trades, set_name="Validation"):
+    """Calculate performance metrics"""
+    returns = np.diff(equity) / equity[:-1]
+    
+    # Sharpe Ratio
+    sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
+    
+    # Max Drawdown
+    peak = equity[0]
+    max_dd = 0
+    for value in equity:
+        if value > peak:
+            peak = value
+        dd = (peak - value) / peak
+        if dd > max_dd:
+            max_dd = dd
+            
+    # Trade stats
+    win_rate = np.mean(np.array(trades) > 0) if trades else 0
+    
+    print(f"\n{set_name} Performance:")
+    print(f"Sharpe Ratio: {sharpe:.2f}")
+    print(f"Max Drawdown: {max_dd:.2%}")
+    print(f"Total Trades: {len(trades)}")
+    print(f"Win Rate: {win_rate:.2%}")
+    
+    return {
+        'sharpe': sharpe,
+        'max_drawdown': max_dd,
+        'num_trades': len(trades),
+        'win_rate': win_rate
+    }
 
 # --- Evaluation ---
 def evaluate_model(model, X_test, y_test):
     model.eval()
     with torch.no_grad():
         logits = model(X_test)
-        probs = softmax(logits, dim=1)  # Apply softmax for probabilities
+        probs = torch.softmax(logits, dim=1)  # Shape: [batch_size, num_classes]
         preds = torch.argmax(probs, dim=1)
 
-        mse = mean_squared_error(y_test, preds)
-        mae = mean_absolute_error(y_test, preds)
-        r2 = r2_score(y_test, preds)
-        print(f"Test MSE: {mse:.4f} | MAE: {mae:.4f} | R²: {r2:.4f}")
+        y_true = y_test.squeeze().long()
+        y_pred = preds
+
+        acc = accuracy_score(y_true, y_pred)
+        report = classification_report(y_true, y_pred, target_names=["Buy", "Hold", "Sell"])
+        cm = confusion_matrix(y_true, y_pred)
+
+        print(f"Accuracy: {acc:.4f}")
+        print("Classification Report:\n", report)
+        print("Confusion Matrix:\n", cm)
+
+        # Convert to numpy and save
+        df_probs = pd.DataFrame(probs.numpy(), columns=["Prob_Buy", "Prob_Hold", "Prob_Sell"])
+        df_probs["True_Label"] = y_true.numpy()
+        df_probs["Predicted_Label"] = y_pred.numpy()
+        df_probs.to_csv(MODEL_OUTPUT_FILE_PATH, index=False)
+        print(f"Saved model probabilities and predictions to: {MODEL_OUTPUT_FILE_PATH}")
+
+
+    return probs.numpy(), y_true.numpy()
     
-    return probs.numpy(), y_test.numpy()
+def plot_results(df, equity, signals, set_name="validation"):
+    """Visualize backtest results"""
+    plt.figure(figsize=(14, 7))
     
-def plot_predictions(preds, actual, title="Model Prediction vs Actual"):
-    plt.figure(figsize=(12, 6))
-    plt.plot(actual, label="Actual", linewidth=2)
-    plt.plot(preds, label="Predicted", linestyle='--')
-    plt.title(title)
-    plt.xlabel("Time")
-    plt.ylabel("Return")
-    plt.legend()
-    plt.grid(True)
+    # Price and Equity
+    ax1 = plt.subplot(2, 1, 1)
+    ax1.plot(df.index, df['close'], label='Price', alpha=0.6)
+    ax1.set_ylabel('Price')
+    ax1.legend(loc='upper left')
+    
+    ax2 = ax1.twinx()
+    ax2.plot(df.index, equity, label='Equity', color='green')
+    ax2.set_ylabel('Portfolio Value')
+    ax2.legend(loc='upper right')
+    ax1.set_title(f'{set_name.capitalize()} Backtest Results')
+
+    # Signals
+    plt.subplot(2, 1, 2)
+    plt.step(df.index, signals, where='post', label='Signals')
+    plt.yticks([0, 1, 2], ['Buy', 'Hold', 'Sell'])
+    plt.ylabel('Trading Signal')
+    plt.xlabel('Date')
+    
     plt.tight_layout()
     plt.savefig(EVALUATE_PATH)
+    plt.close()
 
 if __name__ == "__main__":
     dataset_path = "experimental/datasets/btc_data_with_target.csv"
@@ -165,12 +320,26 @@ if __name__ == "__main__":
     X_test, y_test = preprocess_data(scaled_test)
     # --- Convert to Torch tensors ---
     train_loader, val_loader, X_test, y_test = convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test)
-    # --- Initialize model ---
+    # Train model
+    class_weights = calculate_class_distribution(y_train)
+    loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
     model = CryptoCNN(input_features=X_train.shape[2], num_classes=3)
-    torch.save(model.state_dict(), OUTPUT_PATH)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    # --- Train model ---
-    train_model(model, train_loader, val_loader, optimizer)
-    # --- Evaluate model ---
-    pred, actual = evaluate_model(model, X_test, y_test)
-    plot_predictions(pred, actual)
+    torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    model = train_model(model, train_loader, val_loader, optimizer, loss_criterion)
+
+    # Get predicted probabilities
+    probs, y_true = evaluate_model(model, X_test, y_test)
+
+    # Generate trading signals
+    signals = predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30)
+
+    # Backtest on raw (non-scaled) test set
+    df_test_raw = df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
+    equity, trades = backtest(df_test_raw, signals)
+
+    # Evaluate performance
+    evaluate_performance(equity, trades, set_name="Test")
+
+    # Plot result
+    plot_results(df_test_raw, equity, signals, set_name="Test")
