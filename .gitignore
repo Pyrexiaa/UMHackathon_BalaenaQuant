@@ -2,6 +2,11 @@
 __pycache__/
 *.pyc
 
+# Ignore model files
+*.pkl
+*.pt
+*.h5
+
 # Ignore environment-specific files
 *.env
 *.venv
