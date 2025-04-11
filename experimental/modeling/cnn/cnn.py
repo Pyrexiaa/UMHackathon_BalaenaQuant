@@ -12,6 +12,7 @@ from .config import (
     LOSS_FUNCTION,
     SCALING_PATH,
     OUTPUT_PATH,
+    EVALUATE_PATH
 )
 from .model_architecture import CryptoCNN
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -126,6 +127,7 @@ def evaluate_model(model, X_test, y_test):
     model.eval()
     with torch.no_grad():
         preds = model(X_test).squeeze()
+        y_test = y_test.squeeze()
         mse = mean_squared_error(y_test, preds)
         mae = mean_absolute_error(y_test, preds)
         r2 = r2_score(y_test, preds)
@@ -142,14 +144,14 @@ def plot_predictions(preds, actual, title="Model Prediction vs Actual"):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(EVALUATE_PATH)
 
 if __name__ == "__main__":
     dataset_path = "experimental/datasets/btc_data.csv"
     # --- Load CSV ---
     df_train, df_val, df_test = load_csv(dataset_path)
     # # --- Normalize ---
-    scaled_train = normalize_data(df_train)
+    scaled_train = normalize_data(df_train, previous_scaling=False)
     scaled_val = normalize_data(df_val, previous_scaling=SCALING_PATH)
     scaled_test = normalize_data(df_test, previous_scaling=SCALING_PATH)
     # # --- Preprocess data ---
@@ -159,9 +161,11 @@ if __name__ == "__main__":
     # --- Convert to Torch tensors ---
     train_loader, val_loader, X_test, y_test = convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test)
     # --- Initialize model ---
-    model = CryptoCNN(input_features=X_train.shape[2], num_classes=3)
+    model = CryptoCNN(input_features=X_train.shape[2], num_classes=1)
+    torch.save(model.state_dict(), OUTPUT_PATH)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     # --- Train model ---
     train_model(model, train_loader, val_loader, optimizer)
     # --- Evaluate model ---
-    evaluate_model(model, X_test, y_test)
+    pred, actual = evaluate_model(model, X_test, y_test)
+    plot_predictions(pred, actual)
