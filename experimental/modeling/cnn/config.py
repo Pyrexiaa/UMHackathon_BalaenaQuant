@@ -3,8 +3,8 @@ import torch.nn as nn
 # --- Hyperparameters ---
 WINDOW_SIZE = 12  # number of time steps used for prediction
 BATCH_SIZE = 32
-EPOCHS = 100
-LR = 5e-4
+EPOCHS = 10
+LR = 5e-5
 
 # --- Model Configuration ---
 LOSS_FUNCTION = nn.CrossEntropyLoss()

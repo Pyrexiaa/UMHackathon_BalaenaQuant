@@ -99,6 +99,7 @@ def train_model(model, train_loader, val_loader, optimizer):
         model.train()
         total_loss = 0
         for batch_x, batch_y in train_loader:
+            batch_y = torch.argmax(batch_y, dim=1)
             optimizer.zero_grad()
             logits = model(batch_x)
             loss = LOSS_FUNCTION(logits, batch_y)
@@ -112,6 +113,7 @@ def train_model(model, train_loader, val_loader, optimizer):
         val_loss = 0
         with torch.no_grad():
             for val_x, val_y in val_loader:
+                val_y = torch.argmax(val_y, dim=1)
                 val_preds = model(val_x)
                 val_loss += LOSS_FUNCTION(val_preds, val_y).item()
 
@@ -150,7 +152,7 @@ def plot_predictions(preds, actual, title="Model Prediction vs Actual"):
     plt.savefig(EVALUATE_PATH)
 
 if __name__ == "__main__":
-    dataset_path = "experimental/datasets/btc_data.csv"
+    dataset_path = "experimental/datasets/btc_data_with_target.csv"
     # --- Load CSV ---
     df_train, df_val, df_test = load_csv(dataset_path)
     # # --- Normalize ---
