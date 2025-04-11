@@ -7,7 +7,7 @@ EPOCHS = 100
 LR = 5e-4
 
 # --- Model Configuration ---
-LOSS_FUNCTION = nn.MSELoss()
+LOSS_FUNCTION = nn.CrossEntropyLoss()
 
 # --- Paths ---
 SCALING_PATH = "output/cnn/scaling_values.pkl"

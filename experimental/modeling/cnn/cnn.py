@@ -18,6 +18,7 @@ from .model_architecture import CryptoCNN
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 from joblib import dump, load
+from torch.nn.functional import softmax
 
 # --- Load CSV ---
 def load_csv(df_path):
@@ -27,8 +28,7 @@ def load_csv(df_path):
     df["datetime"] = pd.to_datetime(df["datetime"])
     df["year"] = df["datetime"].dt.year
     
-    # Generate label: future close price difference after WINDOW_SIZE steps
-    df["label"] = df["close"].shift(-WINDOW_SIZE) - df["close"]
+    # Drop nan rows
     df = df.dropna()
 
     # Split by year
@@ -45,8 +45,8 @@ def load_csv(df_path):
 # --- Normalize ---
 def normalize_data(df, previous_scaling=None):
     # Separate features and label
-    features = df.drop(columns=["label"])
-    label = df["label"].reset_index(drop=True)
+    features = df.drop(columns=["target"])
+    target = df["target"].reset_index(drop=True)
 
     if previous_scaling:
         # Load previously saved scaler
@@ -59,7 +59,7 @@ def normalize_data(df, previous_scaling=None):
 
     # Combine scaled features and label
     scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
-    scaled_df["label"] = label
+    scaled_df["target"] = target
 
     return scaled_df
 
@@ -68,8 +68,8 @@ def preprocess_data(df):
     X = []
     y = []
     for i in range(WINDOW_SIZE, len(df)):
-        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["label"]).values)
-        y.append(df["label"].iloc[i])
+        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["target"]).values)
+        y.append(df["target"].iloc[i])
     
     return np.array(X), np.array(y)
 
@@ -126,13 +126,16 @@ def train_model(model, train_loader, val_loader, optimizer):
 def evaluate_model(model, X_test, y_test):
     model.eval()
     with torch.no_grad():
-        preds = model(X_test).squeeze()
-        y_test = y_test.squeeze()
+        logits = model(X_test)
+        probs = softmax(logits, dim=1)  # Apply softmax for probabilities
+        preds = torch.argmax(probs, dim=1)
+
         mse = mean_squared_error(y_test, preds)
         mae = mean_absolute_error(y_test, preds)
         r2 = r2_score(y_test, preds)
         print(f"Test MSE: {mse:.4f} | MAE: {mae:.4f} | R²: {r2:.4f}")
-    return preds.numpy(), y_test.numpy()
+    
+    return probs.numpy(), y_test.numpy()
     
 def plot_predictions(preds, actual, title="Model Prediction vs Actual"):
     plt.figure(figsize=(12, 6))
@@ -161,7 +164,7 @@ if __name__ == "__main__":
     # --- Convert to Torch tensors ---
     train_loader, val_loader, X_test, y_test = convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test)
     # --- Initialize model ---
-    model = CryptoCNN(input_features=X_train.shape[2], num_classes=1)
+    model = CryptoCNN(input_features=X_train.shape[2], num_classes=3)
     torch.save(model.state_dict(), OUTPUT_PATH)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     # --- Train model ---
