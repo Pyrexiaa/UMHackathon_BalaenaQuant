@@ -1,26 +1,33 @@
 import pandas as pd
-from src.strategy.base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
-class MovingAverageCrossoverStrategy(Strategy):
-    def __init__(self, short_window=10, long_window=30):
+class MACrossoverStrategy(BaseStrategy):
+    """
+    Moving Average Crossover Strategy.
+    Generates buy/sell signals when short-term MA crosses above/below long-term MA.
+    """
+
+    def __init__(self, short_window: int = 20, long_window: int = 50):
+        """
+        :params short_window: Window size for the short-term moving average.
+        :params long_window: Window size for the long-term moving average.
+        """
         self.short_window = short_window
         self.long_window = long_window
 
-    def generate_signals(self, probs: None, prices: pd.Series, **kwargs) -> pd.DataFrame:
-        signals = pd.DataFrame(index=prices.index)
-        signals['price'] = prices
-        signals['short_ma'] = prices.rolling(window=self.short_window).mean()
-        signals['long_ma'] = prices.rolling(window=self.long_window).mean()
+    def generate_signals(self, X: pd.DataFrame) -> pd.Series:
+        """
+        Generate trading signals based on moving average crossover.
 
-        signals['signal'] = 0
-        signals['signal'][self.short_window:] = (
-            (signals['short_ma'][self.short_window:] > signals['long_ma'][self.short_window:]).astype(int) * 2 - 1
-        )
+        Args:
+        :params: DataFrame of price data
+        :returns: pd.Series: Series of signals (1 = Buy, -1 = Sell, 0 = Hold)
+        """
+        short_ma = X['Close'].rolling(window=self.short_window).mean()
+        long_ma = X['Close'].rolling(window=self.long_window).mean()
 
-        signals['trade_type'] = signals['signal'].map({1: "BUY", -1: "SELL", 0: "NONE"})
-        signals['entry_price'] = signals['price']
-        signals['stop_loss'] = signals['entry_price'] * 0.99
-        signals['take_profit'] = signals['entry_price'] * 1.03
+        signal = pd.Series(0, index=X.index)
+        signal[(short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))] = 1
+        signal[(short_ma < long_ma) & (short_ma.shift(1) >= long_ma.shift(1))] = -1
 
-        filtered_signals = signals[signals['signal'] != 0]
-        return filtered_signals[['trade_type', 'entry_price', 'stop_loss', 'take_profit']]
+        return signal

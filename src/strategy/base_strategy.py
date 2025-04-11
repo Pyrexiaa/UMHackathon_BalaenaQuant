@@ -1,12 +1,17 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-import numpy as np
 
-class Strategy(ABC):
+class BaseStrategy(ABC):
+    """
+    Abstract base class for trading strategies.
+    """
+
     @abstractmethod
-    def generate_signals(self, probs: np.ndarray, prices: pd.Series, **kwargs) -> pd.DataFrame:
-        """Generate trading signals given model probabilities and price data."""
+    def generate_signals(self, X: pd.DataFrame) -> pd.Series:
+        """
+        Generate trading signals from input data.
+        
+        :params X: DataFrame of features or price data.
+        :return: Series of trading signals (1 = Buy, -1 = Sell, 0 = Hold)
+        """
         pass
-
-def run_strategy(strategy, probs, prices, **kwargs):
-    return strategy.generate_signals(probs, prices, **kwargs)
