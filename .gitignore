@@ -27,4 +27,4 @@ venv/
 
 archive
 
-merged_features.csv
+.DS_Store
