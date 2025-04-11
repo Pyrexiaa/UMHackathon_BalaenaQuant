@@ -18,12 +18,13 @@ from .config import (
     SELL_SIGNAL,
     BUY_SIGNAL,
     HOLD_SIGNAL,
-    SELECTED_FEATURES
 )
-from .model_architecture import CryptoCNN
+from .model_architecture import TCNClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 from joblib import dump, load
+from .datasets import TimeSeriesDataset
+from torch.utils.data import DataLoader
 
 def prepare_features(df):
     if 'close_7d_ma' not in df.columns:
@@ -160,7 +161,6 @@ def train_model(model, train_loader, val_loader, optimizer, loss_criterion):
         model.train()
         total_loss = 0
         for batch_x, batch_y in train_loader:
-            batch_y = torch.argmax(batch_y, dim=1)
             optimizer.zero_grad()
             logits = model(batch_x)
             loss = loss_criterion(logits, batch_y)
@@ -174,7 +174,6 @@ def train_model(model, train_loader, val_loader, optimizer, loss_criterion):
         val_loss = 0
         with torch.no_grad():
             for val_x, val_y in val_loader:
-                val_y = torch.argmax(val_y, dim=1)
                 val_preds = model(val_x)
                 val_loss += loss_criterion(val_preds, val_y).item()
 
@@ -291,33 +290,43 @@ def evaluate_performance(equity, trades, set_name="Validation"):
     }
 
 # --- Evaluation ---
-def evaluate_model(model, X_test, y_test):
+def evaluate_model(model, test_loader):
     model.eval()
+    all_preds = []
+    all_targets = []
+    all_probs = []
+
     with torch.no_grad():
-        logits = model(X_test)
-        probs = torch.softmax(logits, dim=1)  # Shape: [batch_size, num_classes]
-        preds = torch.argmax(probs, dim=1)
+        for inputs, targets in test_loader:
 
-        y_true = y_test.squeeze().long()
-        y_pred = preds
+            logits = model(inputs)
+            probs = torch.softmax(logits, dim=1)  # Shape: [batch_size, num_classes]
+            preds = torch.argmax(probs, dim=1)
 
-        acc = accuracy_score(y_true, y_pred)
-        report = classification_report(y_true, y_pred, target_names=["Buy", "Hold", "Sell"])
-        cm = confusion_matrix(y_true, y_pred)
+            all_preds.extend(preds.cpu().numpy())
+            all_targets.extend(targets.cpu().numpy())
+            all_probs.extend(probs.cpu().numpy())
 
-        print(f"Accuracy: {acc:.4f}")
-        print("Classification Report:\n", report)
-        print("Confusion Matrix:\n", cm)
+    y_true = np.array(all_targets)
+    y_pred = np.array(all_preds)
+    probs_array = np.array(all_probs)
 
-        # Convert to numpy and save
-        df_probs = pd.DataFrame(probs.numpy(), columns=["Prob_Buy", "Prob_Hold", "Prob_Sell"])
-        df_probs["True_Label"] = y_true.numpy()
-        df_probs["Predicted_Label"] = y_pred.numpy()
-        df_probs.to_csv(MODEL_OUTPUT_FILE_PATH, index=False)
-        print(f"Saved model probabilities and predictions to: {MODEL_OUTPUT_FILE_PATH}")
+    acc = accuracy_score(y_true, y_pred)
+    report = classification_report(y_true, y_pred, target_names=["Buy", "Hold", "Sell"])
+    cm = confusion_matrix(y_true, y_pred)
 
+    print(f"Overall Test Accuracy: {acc:.4f}")
+    print("Overall Classification Report:\n", report)
+    print("Overall Confusion Matrix:\n", cm)
 
-    return probs.numpy(), y_true.numpy()
+    # Convert to numpy and save
+    df_probs = pd.DataFrame(probs_array, columns=["Prob_Buy", "Prob_Hold", "Prob_Sell"])
+    df_probs["True_Label"] = y_true
+    df_probs["Predicted_Label"] = y_pred
+    df_probs.to_csv(MODEL_OUTPUT_FILE_PATH, index=False)
+    print(f"Saved overall model probabilities and predictions to: {MODEL_OUTPUT_FILE_PATH}")
+
+    return probs_array, y_true
     
 def plot_results(df, equity, signals, set_name="validation"):
     """Visualize backtest results"""
@@ -362,18 +371,28 @@ if __name__ == "__main__":
     X_train, y_train = preprocess_data(scaled_train)
     X_val, y_val = preprocess_data(scaled_val)
     X_test, y_test = preprocess_data(scaled_test)
-    # --- Convert to Torch tensors ---
-    train_loader, val_loader, X_test, y_test = convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test)
+    # --- Convert to Torch tensors and DataLoaders ---
+    train_dataset = TimeSeriesDataset(X_train, y_train)
+    val_dataset = TimeSeriesDataset(X_val, y_val)
+    test_dataset = TimeSeriesDataset(X_test, y_test)
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
     # Train model
+    input_features = X_train.shape[2]
+    num_channels = [64, 128, 64]  # Define the number of channels in each TCN block
+    model = TCNClassifier(input_features, 3, num_channels)
+    torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
+
     class_weights = calculate_class_distribution(y_train)
     loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
-    model = CryptoCNN(input_features=X_train.shape[2], num_classes=3)
-    torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     model = train_model(model, train_loader, val_loader, optimizer, loss_criterion)
 
     # Get predicted probabilities
-    probs, y_true = evaluate_model(model, X_test, y_test)
+    probs, y_true = evaluate_model(model, test_loader)
 
     # Generate trading signals
     signals = predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30)
