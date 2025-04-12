@@ -1,6 +1,6 @@
 import os
 import joblib
-from .tcn_model import TCNModel
+from .tcn.model import TCNModel
 
 DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "defaults")
 

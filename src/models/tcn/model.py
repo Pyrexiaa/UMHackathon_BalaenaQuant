@@ -2,8 +2,8 @@ import pandas as pd
 import torch
 import joblib
 import numpy as np
-from .base_model import BaseModel
-from ..config import Config
+from ..base_model import BaseModel
+from ...config import Config
 from .model_architecture import TCNClassifier
 
 

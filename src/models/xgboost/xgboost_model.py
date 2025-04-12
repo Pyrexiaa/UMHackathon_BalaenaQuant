@@ -1,7 +1,7 @@
 import xgboost as xgb
 import pandas as pd
 import joblib
-from .base_model import BaseModel
+from ..base_model import BaseModel
 
 class XGBoostModel(BaseModel):
     def __init__(self, **kwargs):

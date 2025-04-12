@@ -1,7 +1,7 @@
 from .base_model import BaseModel
 from .utils import ModelUtils
-from .xgboost_model import XGBoostModel
-from .tcn_model import TCNModel
+from .xgboost.xgboost_model import XGBoostModel
+from .tcn.model import TCNModel
 
 __all__ = [
     "BaseModel",
