@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
+import joblib
 
 class BaseModel(ABC):
     def __init__(self):
@@ -19,16 +20,3 @@ class BaseModel(ABC):
         """
         pass
 
-    @abstractmethod
-    def save_model(self, path: str):
-        """
-        Save the model to a file (.pkl or .pt depending on the backend).
-        """
-        pass
-
-    @abstractmethod
-    def load_model(self, path: str):
-        """
-        Load the model from a file.
-        """
-        pass

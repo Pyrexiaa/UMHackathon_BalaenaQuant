@@ -2,7 +2,7 @@ from portfolio import Portfolio
 from metrics import Metrics
 
 class Backtester:
-    def __init__(self, strategy, data, initial_capital: float = 100000, trading_fee: float = 0.0006, risk_free_rate: float = 0.02):
+    def __init__(self, data, strategy, initial_capital: float = 100000, trading_fee: float = 0.0006, risk_free_rate: float = 0.02):
         """
         Initialize the backtester with strategy, data, and configuration.
 
@@ -12,8 +12,8 @@ class Backtester:
         :param trading_fee: Trading fee as a fraction (e.g., 0.0006 for 0.06%).
         :param risk_free_rate: Risk-free rate used in performance metrics.
         """
-        self.strategy = strategy
         self.data = data
+        self.strategy = strategy
         self.portfolio = Portfolio(initial_capital)
         self.trading_fee = trading_fee
         self.risk_free_rate = risk_free_rate

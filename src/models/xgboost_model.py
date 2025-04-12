@@ -13,9 +13,3 @@ class XGBoostModel(BaseModel):
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         return pd.Series(self.model.predict(X), index=X.index)
-
-    def save_model(self, path: str):
-        joblib.dump(self.model, path)
-
-    def load_model(self, path: str):
-        self.model = joblib.load(path)
