@@ -16,7 +16,7 @@ pip install -r requirements.txt
 QuantPilot/
 │
 ├── docs/                               # Documentation resources
-│   └── user_guide.md                   # Comprehensive user guide for running the backtester
+│   └── backtesting.md                  # User guide for running the backtester
 │
 ├── examples/                           # Example scripts demonstrating how to use the backtester
 │   └── simple_backtesting.py           # A simple example of a strategy backtest
