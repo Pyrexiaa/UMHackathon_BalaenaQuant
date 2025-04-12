@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# Ignore model files
+*.h5
+
 # Ignore environment-specific files
 *.env
 *.venv
@@ -26,4 +29,6 @@ env/
 venv/
 
 archive
+
+.DS_Store
 .DS_Store

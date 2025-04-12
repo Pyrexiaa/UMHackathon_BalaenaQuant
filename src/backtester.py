@@ -1,8 +1,9 @@
 from portfolio import Portfolio
 from metrics import Metrics
+from tabulate import tabulate
 
 class Backtester:
-    def __init__(self, strategy, data, initial_capital: float = 100000, trading_fee: float = 0.0006, risk_free_rate: float = 0.02):
+    def __init__(self, data, strategy, initial_capital: float = 100000, trading_fee: float = 0.0006, risk_free_rate: float = 0.02):
         """
         Initialize the backtester with strategy, data, and configuration.
 
@@ -12,8 +13,8 @@ class Backtester:
         :param trading_fee: Trading fee as a fraction (e.g., 0.0006 for 0.06%).
         :param risk_free_rate: Risk-free rate used in performance metrics.
         """
-        self.strategy = strategy
         self.data = data
+        self.strategy = strategy
         self.portfolio = Portfolio(initial_capital)
         self.trading_fee = trading_fee
         self.risk_free_rate = risk_free_rate
@@ -71,25 +72,15 @@ class Backtester:
                 entry_time_for_pnl = signal.get('entry_time')
                 self.execute_trade(symbol, qty, price, current_time=date, entry_time_for_pnl=entry_time_for_pnl, is_buy_trade=False)
 
-    def run(self):
+    def run(self, verbose: bool = True):
         """
-        Run the full backtest over historical data.
+        Run the full backtest over historical data and optionally print performance metrics.
         """
         for date, row in self.data.iterrows():
             self.strategy.on_bar(date, row)
             self.process_signals(date, row)
             self.portfolio.update_equity(self.data.loc[:date])
 
-    def get_performance_metrics(self):
-        """
-        Generate performance metrics from the backtest results.
-
-        :return: Dictionary of performance metrics.
-        """
-        metrics = Metrics(
-            equity_curve=self.portfolio.get_equity_curve(),
-            trades=self.portfolio.get_trade_log(),
-            trading_fee=self.trading_fee,
-            risk_free_rate=self.risk_free_rate
-        )
-        return metrics.get_metrics()
+        if verbose:
+            metrics = Metrics.get_metrics()
+            print(tabulate(metrics.items(), tablefmt="plain"))
