@@ -15,48 +15,45 @@ pip install -r requirements.txt
 ```
 QuantPilot/
 │
-│   ├── docs/                            # Documentation files
-│   │   └── user_guide.md                # Detailed guide for using the backtester
-│   │ 
-│   ├── examples/                        # Example scripts for backtesting strategies
-│   │   └── simple_backtesting.py        # Example of a basic backtesting strategy
-│   │ 
-│   ├── experimental/                    # Experimental features and development
-│   │ 
-│   ├── src/                             # Source code for backtesting and strategy logic
-│   │   ├── data/                        # Code related to data loader and preprocessing
-│   │   │   ├── api/
-│   │   │   └── loader/
-│   │   │
-│   │   ├── features/                    # Feature engineering code
-│   │   │   ├── base_features.py
-│   │   │   ├── feature_selection.py
-│   │   │   ├── ml_features.py
-│   │   │   ├── technical_indicators.py
-│   │   │
-│   │   ├── metrics/                     # Metrics for evaluating strategy performance
-│   │   │   ├── base_metrics.py
-│   │   │   └── metrics.py
-│   │   │
-│   │   ├── models/                      # Machine learning models for strategy prediction
-│   │   │   ├── base_model.py
-│   │   │   ├── [name]_model.py
-│   │   │   └── utils.py
-│   │   │
-│   │   ├── strategy/                    # Strategy-specific code and logic
-│   │   │   ├── base_strategy.py
-│   │   │   └── ml_strategy.py
-│   │   │
-│   │   ├── backtester.py                # Core backtesting logic (handles execution of trades, backtesting, forward testing)
-│   │   └── config.py                    # Configuration file for parameters and settings
+├── docs/                               # Documentation resources
+│   └── user_guide.md                   # Comprehensive user guide for running the backtester
+│
+├── examples/                           # Example scripts demonstrating how to use the backtester
+│   └── simple_backtesting.py           # A simple example of a strategy backtest
+│
+├── experimental/                       # Experimental modules and in-development features
+│
+├── src/                                # Main source code for the QuantPilot system
+│   ├── data/                           # Data loading and preprocessing utilities
+│   │   ├── api/                        # External API integrations (e.g., price feeds)
+│   │   └── loader/                     # Functions to load and prepare data from various sources
 │   │
+│   ├── features/                       # Feature engineering and transformation modules
+│   │   ├── base_features.py            # Abstract base class for custom features
+│   │   ├── feature_selection.py        # Feature selection techniques
+│   │   ├── ml_features.py              # Machine learning-driven feature generators
+│   │   └── technical_indicators.py     # Standard technical indicators (e.g., RSI, MACD)
+│   │
+│   ├── metrics/                        # Modules for evaluating strategy performance
+│   │   ├── base_metrics.py             # Base class for metrics
+│   │   └── metrics.py                  # Implementations of common backtesting metrics
+│   │
+│   ├── models/                         # Machine learning model implementations
+│   │   ├── base_model.py               # Abstract base class for models
+│   │   ├── [name]_model.py             # Custom model files (e.g., TCN, CNN, XGBoost)
+│   │   └── utils.py                    # Utility functions for model handling and prediction
+│   │
+│   ├── strategy/                       # Trading strategy definitions
+│   │   ├── base_strategy.py            # Base class for strategy templates
+│   │   └── ml_strategy.py              # ML-based strategy implementation
+│   │
+│   ├── backtester.py                   # Core logic for backtesting and forward testing execution
+│   └── config.py                       # Global configuration and parameter settings
 │
-├── .env.example                         # Example environment variables file
-├── .gitignore                           # Git ignore file
-│
-├── requirements.txt                     # List of required Python packages
-└── README.md                            # Project overview and setup instructions
-
+├── .env.example                        # Example .env file for environment variable setup
+├── .gitignore                          # Specifies files and directories to be ignored by Git
+├── requirements.txt                    # Project dependencies for Python environment
+└── README.md                           # Main project documentation and setup guide
 ```
 
 ## Usage
@@ -118,7 +115,7 @@ Profit Factor                 1.91
 Average Holding Period        1 days 21:30:00
 Trade Frequency (trades/day)  7.23
 ============================================================
-
+```
 
 
 ## Documentation
