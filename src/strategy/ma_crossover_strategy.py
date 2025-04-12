@@ -9,8 +9,8 @@ class MACrossoverStrategy(BaseStrategy):
 
     def __init__(self, short_window: int = 20, long_window: int = 50):
         """
-        :params short_window: Window size for the short-term moving average.
-        :params long_window: Window size for the long-term moving average.
+        :param short_window: Window size for the short-term moving average.
+        :param long_window: Window size for the long-term moving average.
         """
         self.short_window = short_window
         self.long_window = long_window
@@ -19,15 +19,22 @@ class MACrossoverStrategy(BaseStrategy):
         """
         Generate trading signals based on moving average crossover.
 
-        Args:
-        :params: DataFrame of price data
-        :returns: pd.Series: Series of signals (1 = Buy, -1 = Sell, 0 = Hold)
+        :param X: DataFrame containing at least a 'Close' column
+        :return: pd.Series of signals (2 = Buy, 0 = Sell, 1 = Hold)
         """
-        short_ma = X['Close'].rolling(window=self.short_window).mean()
-        long_ma = X['Close'].rolling(window=self.long_window).mean()
+        # Compute moving averages
+        short_ma = X['Close'].rolling(window=self.short_window, min_periods=1).mean()
+        long_ma = X['Close'].rolling(window=self.long_window, min_periods=1).mean()
 
+        # Initialize signal series
         signal = pd.Series(0, index=X.index)
-        signal[(short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))] = 1
-        signal[(short_ma < long_ma) & (short_ma.shift(1) >= long_ma.shift(1))] = -1
+
+        # Buy signal: short crosses above long
+        crossover_buy = (short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))
+        signal[crossover_buy] = 2
+
+        # Sell signal: short crosses below long
+        crossover_sell = (short_ma < long_ma) & (short_ma.shift(1) >= long_ma.shift(1))
+        signal[crossover_sell] = 0
 
         return signal

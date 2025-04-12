@@ -5,17 +5,6 @@ from typing import List
 import numpy as np
 import ta
 
-# class MovingAverageFeature(BaseFeature):
-#     def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-#         df[self.feature_name] = df[self.column].rolling(self.window).mean()
-#         return df
-
-# class VolatilityFeature(BaseFeature):
-#     def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-#         returns = df[self.column].pct_change()
-#         df[self.feature_name] = returns.rolling(self.window).std()
-#         return df
-
 
 class FeatureTechnicalIndicators(BaseFeature):
     def __init__(self, df: pd.DataFrame, price_col: str = 'close'):

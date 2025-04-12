@@ -1,116 +1,76 @@
-from typing import Optional, Union
-# from .base_feature import BaseFeature
-import pandas as pd
-import numpy as np
-from hmmlearn import hmm
-from typing import List
 import pickle
+from typing import Optional, Union, List
+
+import numpy as np
+import pandas as pd
+from hmmlearn import hmm
 from sklearn.cluster import KMeans
 
 
-class HMMFeature(BaseFeature):
-    def __init__(self, model, column: str = "close", window: Optional[Union[int, str]] = None):
-        """
-        :param model: Pretrained HMM model that supports a `predict` method.
-        :param column: Column to use for feature extraction, default is 'close'.
-        :param window: Lookback window (int or str, e.g., '14d', '3h')
-        """
-        super().__init__(column, window)
-        self.model = model  # Assume model has a `predict` method
-
-    def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Add HMM feature to the DataFrame by predicting the hidden states
-        using the provided HMM model.
-        """
-        # Ensure the 'close' column exists
-        if self.column not in df.columns:
-            raise ValueError(f"Column '{self.column}' not found in DataFrame.")
-        
-        # Model prediction (Assume model predicts hidden states based on `df[self.column]`)
-        hidden_states = self.model.predict(df[[self.column]])
-        
-        # Add hidden states as a new feature (column)
-        df[self.feature_name] = hidden_states
-        return df
-
-def add_hmm_features(ori_df: pd.DataFrame, 
-                     feature_cols: List[str], 
-                     n_components: int = 3,
-                     n_iter: int = 1000,
-                     save_model_path: str = None,
-                     pretrained_model_path: Optional[str] = None) -> pd.DataFrame:
+def add_hmm_features(
+    ori_df: pd.DataFrame, 
+    feature_cols: List[str], 
+    n_components: int = 3,
+    n_iter: int = 1000,
+    save_model_path: Optional[str] = None,
+    pretrained_model_path: Optional[str] = None
+) -> pd.DataFrame:
     """
     Add HMM-based hidden state features to a DataFrame.
 
-    Args:
-        ori_df : pd.DataFrame
-            DataFrame containing the feature columns.
-        feature_cols : List[str]
-            List of columns to use as input for HMM (e.g., ['close', 'volume']).
-        n_components : int
-            Number of hidden states for the HMM.
-        n_iter : int
-            Number of iterations for HMM fitting.
-        save_model_path : str
-            Path to save the trained HMM model.
-        pretrained_model_path : Optional[str]
-            Path to a pretrained HMM model. If provided, the model will be loaded instead of trained.            
-    Returns:
-        df : pd.DataFrame
-            DataFrame with an added HMM state column (or columns).
+    :param ori_df: Input DataFrame.
+    :param feature_cols: Columns to use as input for HMM (e.g., ['close', 'volume']).
+    :param n_components: Number of hidden states for the HMM.
+    :param n_iter: Number of iterations for HMM fitting.
+    :param save_model_path: Optional path to save the trained HMM model.
+    :param pretrained_model_path: Optional path to load a pretrained HMM model.
+    :return: DataFrame with an added 'hmm_state' column.
     """
     df = ori_df.copy()
 
     if pretrained_model_path:
-        # Load the pretrained model
         with open(pretrained_model_path, 'rb') as f:
             hmm_model = pickle.load(f)
-
     else:  
-        hmm_model = hmm.GaussianHMM(n_components=n_components, covariance_type="diag", 
-                                n_iter=n_iter, random_state=42)  
+        hmm_model = hmm.GaussianHMM(
+            n_components=n_components,
+            covariance_type="diag", 
+            n_iter=n_iter,
+            random_state=42
+        )
         hmm_model.fit(df[feature_cols].values)
-    
-        # Save the model if a path is provided
+
         if save_model_path:
             with open(save_model_path, 'wb') as f:
                 pickle.dump(hmm_model, f)
-                
+
     hidden_states = hmm_model.predict(df[feature_cols].values)
     df['hmm_state'] = hidden_states
-    
+
     return df
 
 
-def add_rolling_kmeans_cluster_feature(df: pd.DataFrame, 
-                                       feature_cols: List[str], 
-                                       cluster_col_name: str = 'kmeans_cluster', 
-                                       n_clusters: int = 3,
-                                       window_size: int = None) -> pd.DataFrame:
+def add_rolling_kmeans_cluster_feature(
+    df: pd.DataFrame, 
+    feature_cols: List[str], 
+    cluster_col_name: str = 'kmeans_cluster', 
+    n_clusters: int = 3,
+    window_size: Optional[int] = None
+) -> pd.DataFrame:
     """
-    Add rolling KMeans cluster label based on selected feature columns.
+    Add rolling KMeans cluster labels to a DataFrame.
 
-    Parameters:
-        df : pd.DataFrame
-            Input DataFrame.
-        feature_cols : List[str]
-            Columns used for clustering.
-        cluster_col_name : str
-            Name of the new column to store the cluster label.
-        n_clusters : int
-            Number of clusters for KMeans.
-        window_size : int
-            Rolling window size for fitting KMeans.
-
-    Returns:
-        pd.DataFrame with a new column of rolling cluster labels.
+    :param df: Input DataFrame.
+    :param feature_cols: Columns used for clustering.
+    :param cluster_col_name: Name of the new column to store the cluster label.
+    :param n_clusters: Number of clusters for KMeans.
+    :param window_size: Rolling window size for fitting KMeans. If None, fit on full data.
+    :return: DataFrame with a new column of rolling cluster labels.
     """
     df = df.copy()
-    df[cluster_col_name] = np.nan  # Initialize output column
+    df[cluster_col_name] = np.nan
 
     if window_size is None:
-        # If no window size is provided, fit KMeans on the entire DataFrame
         kmeans = KMeans(n_clusters=n_clusters, random_state=42)
         labels = kmeans.fit_predict(df[feature_cols].values)
         df[cluster_col_name] = labels
@@ -118,12 +78,44 @@ def add_rolling_kmeans_cluster_feature(df: pd.DataFrame,
         for i in range(window_size, len(df)):
             window_data = df.iloc[i - window_size:i][feature_cols]
             if window_data.isnull().values.any():
-                continue  # skip if NaN exists in window
-
+                continue
             kmeans = KMeans(n_clusters=n_clusters, random_state=42)
             labels = kmeans.fit_predict(window_data.values)
-
-            # Assign last point's label to the current row
             df.at[df.index[i - 1], cluster_col_name] = labels[-1]
 
     return df
+
+
+def add_nlp_sentiment_score(
+    main_df: pd.DataFrame,
+    sentiment_file_path: str,
+    datetime_col: str = 'datetime'
+) -> pd.DataFrame:
+    """
+    Maps hourly sentiment scores to a main DataFrame.
+
+    :param main_df: Main DataFrame with hourly data, containing a datetime column or index.
+    :param sentiment_file_path: Path to the sentiment CSV file with 'Date' and 'Accurate Sentiments' columns.
+    :param datetime_col: Name of the datetime column in `main_df`. If None or matches index name, uses the index.
+    :return: DataFrame with a new 'sentiment' column mapped by the hour.
+    """
+    sentiment_df = pd.read_csv(sentiment_file_path)
+    sentiment_df['Date'] = pd.to_datetime(sentiment_df['Date'])
+    sentiment_df['Hour'] = sentiment_df['Date'].dt.floor('H')
+
+    hourly_sentiments = sentiment_df.groupby('Hour')['Accurate Sentiments'].mean().reset_index()
+    sentiment_dict = dict(zip(hourly_sentiments['Hour'], hourly_sentiments['Accurate Sentiments']))
+
+    result_df = main_df.copy()
+
+    if datetime_col is None or datetime_col == main_df.index.name:
+        result_df['sentiment'] = pd.Series(
+            index=result_df.index,
+            data=[sentiment_dict.get(idx, 0) for idx in result_df.index]
+        )
+    else:
+        if not pd.api.types.is_datetime64_any_dtype(result_df[datetime_col]):
+            result_df[datetime_col] = pd.to_datetime(result_df[datetime_col])
+        result_df['sentiment'] = result_df[datetime_col].map(sentiment_dict).fillna(0)
+
+    return result_df

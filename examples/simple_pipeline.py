@@ -8,6 +8,7 @@ from src.models import get_model
 
 if __name__ == "__main__":
     
+    # Path to data
     file_path = os.path.join(os.path.dirname(__file__), 'sample_data', 'btc_data_with_target_modified.csv')
     
     # Load data
@@ -19,8 +20,9 @@ if __name__ == "__main__":
     # Initialize strategy
     strategy = MLStrategy(model=model)
 
-    # Run backtest
+    # Run backtest and forward test
     bt = Backtester(data=df, strategy=strategy)
-    bt.run(forward_test=True, forward_years=1)
+    bt.run(forward_test=True, forward_start_date="2024-01-01")
 
+    # Plot results
     bt.plot_results()

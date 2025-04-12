@@ -27,39 +27,13 @@ from .datasets import TimeSeriesDataset
 from torch.utils.data import DataLoader
 
 def prepare_features(df):
-    if 'close_7d_ma' not in df.columns:
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-    if 'close_30d_std' not in df.columns:
-        df['close_30d_std'] = df['close'].rolling(30).std()
-    if 'volume_zscore' not in df.columns:
-        df['volume_zscore'] = ((df['volume'] - df['volume'].rolling(30).mean()) / 
-                            df['volume'].rolling(30).std())
-
-    if ('exchange_whale_ratio' in df.columns and 
-        'start_time_exchange_whale_ratio' in df.columns):
-        df['whale_ratio_diff'] = (df['exchange_whale_ratio'] - 
-                                    df['start_time_exchange_whale_ratio'])
-    
-    # Calculate delta_estimated_leverage_ratio if components exist
-    if ('estimated_leverage_ratio' in df.columns and 
-        'start_time_estimated_leverage_ratio' in df.columns):
-        df['delta_estimated_leverage_ratio'] = (df['estimated_leverage_ratio'] - 
-                                                df['start_time_estimated_leverage_ratio'])
-
     potential_features = [
-        'delta_estimated_leverage_ratio',
-        'whale_ratio_diff',
-        'close_7d_ma',
-        'close_30d_std',
-        'volume_zscore',
-        'taker_buy_ratio',
-        'open_interest',
-        'positions',
-        'close',
-        "open",
-        "high",
-        "low",
-        "volume"
+        'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
+        'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
+        'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
+        'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
+        'addresses_count_sender', 'addresses_count_active', 'blockreward', 
+        'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', "target"
     ]
 
     df = df[potential_features].copy()
@@ -107,8 +81,8 @@ def load_csv(df_path):
 # --- Normalize ---
 def normalize_data(df, previous_scaling=None):
     # Separate features and label
-    features = df.drop(columns=["positions"])
-    positions = df["positions"].reset_index(drop=True)
+    features = df.drop(columns=["target"])
+    target = df["target"].reset_index(drop=True)
 
     if previous_scaling:
         # Load previously saved scaler
@@ -121,7 +95,7 @@ def normalize_data(df, previous_scaling=None):
 
     # Combine scaled features and label
     scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
-    scaled_df["positions"] = positions
+    scaled_df["target"] = target
 
     return scaled_df
 
@@ -130,8 +104,8 @@ def preprocess_data(df):
     X = []
     y = []
     for i in range(WINDOW_SIZE, len(df)):
-        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["positions"]).values)
-        y.append(df["positions"].iloc[i])
+        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["target"]).values)
+        y.append(df["target"].iloc[i])
     
     return np.array(X), np.array(y)
 
@@ -203,18 +177,17 @@ def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
     return np.array(signals)
 
 def backtest(df, signals):
-    """Backtest strategy based on trading signals."""
+    """Backtest strategy based on trading signals (0: buy, 1: hold, 2: sell)."""
     capital = 1000000
     position = 0
     entry_price = 0
-    prev_signal = 0
+    prev_signal = 1  # Initialize with hold signal
     equity = []
     trades = []
     pnl_list = []
     pos_list = []
     capital_list = []
     trades_flag = []
-
 
     for i in range(len(signals)):
         price = df.iloc[i]["close"]
@@ -223,22 +196,100 @@ def backtest(df, signals):
 
         # Exit condition
         if position != 0 and signals[i] != prev_signal:
-            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            if position > 0:  # Long position
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            elif position < 0:  # Short position
+                pnl = position * (entry_price - price) - abs(position * price) * FEE_RATE
             capital += pnl
             trades.append(pnl)
             position = 0  # Close position
             trade_occurred = 1  # Trade happened
 
-        # Entry condition
+        # Entry/Adding to position condition
+        if signals[i] == 0:  # Buy signal
+            available_capital = capital - abs(position) * price * FEE_RATE if position != 0 else capital
+            if available_capital > 0:
+                additional_shares = available_capital // price
+                if additional_shares > 0:
+                    capital -= additional_shares * price * FEE_RATE
+                    if position >= 0:
+                        new_total_shares = abs(position) + additional_shares
+                        entry_price = (abs(position) * entry_price + additional_shares * price) / new_total_shares if abs(position) > 0 else price
+                        position = new_total_shares
+                    else:  # Closing short and opening long
+                        pnl = position * (entry_price - price) - abs(position * price) * FEE_RATE
+                        capital += pnl
+                        trades.append(pnl)
+                        position = additional_shares
+                        entry_price = price
+                        trade_occurred = 1
+            prev_signal = signals[i]
+        elif signals[i] == 2:  # Sell signal
+            available_capital = capital - abs(position) * price * FEE_RATE if position != 0 else capital
+            if available_capital > 0:
+                additional_shares = available_capital // price
+                if additional_shares > 0:
+                    capital -= additional_shares * price * FEE_RATE
+                    if position <= 0:
+                        new_total_shares = abs(position) + additional_shares
+                        entry_price = (abs(position) * entry_price + additional_shares * price) / new_total_shares if abs(position) > 0 else price
+                        position = -new_total_shares
+                    else:  # Closing long and opening short
+                        pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                        capital += pnl
+                        trades.append(pnl)
+                        position = -additional_shares
+                        entry_price = price
+                        trade_occurred = 1
+            prev_signal = signals[i]
+        elif signals[i] == 1:
+            prev_signal = signals[i] # Hold signal
+
+        # Logging per step
+        current_equity = capital
+        if position > 0:
+            current_equity += position * price
+        elif position < 0:
+            current_equity += position * entry_price - position * price
+
+    # TODO: Edit backtest formula
+    capital, position, prev_signal = 1_000_000, 0, 0
+    equity, trades, pnl_list, pos_list, capital_list, trades_flag = [], [], [], [], [], []
+
+    for i in range(len(df)):
+        price = df.iloc[i]['close']
+
+        if prev_signal != 0 and signals[i] != prev_signal:
+            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            capital += pnl
+            position = 0
+            trades.append(pnl)
+
         if signals[i] != 0 and position == 0:
             entry_price = price
             position = (capital // price) * signals[i]
             capital -= abs(position * price) * FEE_RATE
             prev_signal = signals[i]
 
-        # Logging per step
-        current_equity = capital + position * price
-        equity.append(current_equity)
+        # Apply Stop-Loss and Take-Profit:
+        if position != 0:
+            # Check for stop-loss condition (e.g., 3% loss)
+            if (price - entry_price) / entry_price < -0.03:
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                capital += pnl
+                position = 0
+                trades.append(pnl)
+                prev_signal = 0  # Reset signal after stop-loss
+
+            # Check for take-profit condition (e.g., 5% gain)
+            elif (price - entry_price) / entry_price > 0.05:
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                capital += pnl
+                position = 0
+                trades.append(pnl)
+                prev_signal = 0  # Reset signal after take-profit
+
+        equity.append(capital + position * price)
         pnl_list.append(pnl)
         pos_list.append(position)
         capital_list.append(capital)
@@ -256,32 +307,20 @@ def backtest(df, signals):
     return np.array(equity), trades
 
 
+
 def evaluate_performance(equity, trades, set_name="Validation"):
     """Calculate performance metrics"""
     returns = np.diff(equity) / equity[:-1]
-    
-    # Sharpe Ratio
     sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
-    
-    # Max Drawdown
-    peak = equity[0]
-    max_dd = 0
-    for value in equity:
-        if value > peak:
-            peak = value
-        dd = (peak - value) / peak
-        if dd > max_dd:
-            max_dd = dd
-            
-    # Trade stats
+    max_dd = max((peak - val) / peak for peak, val in zip(np.maximum.accumulate(equity), equity))
     win_rate = np.mean(np.array(trades) > 0) if trades else 0
-    
+
     print(f"\n{set_name} Performance:")
     print(f"Sharpe Ratio: {sharpe:.2f}")
     print(f"Max Drawdown: {max_dd:.2%}")
     print(f"Total Trades: {len(trades)}")
     print(f"Win Rate: {win_rate:.2%}")
-    
+
     return {
         'sharpe': sharpe,
         'max_drawdown': max_dd,
@@ -356,13 +395,13 @@ def plot_results(df, equity, signals, set_name="validation"):
     plt.close()
 
 if __name__ == "__main__":
-    dataset_path = "experimental/datasets/btc_data_with_target_modified.csv"
+    dataset_path = "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
     # --- Load CSV ---
-    df_train, df_val, df_test = load_csv(dataset_path)
+    raw_df_train, raw_df_val, raw_df_test = load_csv(dataset_path)
     # --- Prepare features ---
-    df_train = prepare_features(df_train)
-    df_val = prepare_features(df_val)
-    df_test = prepare_features(df_test)
+    df_train = prepare_features(raw_df_train)
+    df_val = prepare_features(raw_df_val)
+    df_test = prepare_features(raw_df_test)
     # # --- Normalize ---
     scaled_train = normalize_data(df_train, previous_scaling=False)
     scaled_val = normalize_data(df_val, previous_scaling=SCALING_PATH)
@@ -398,7 +437,7 @@ if __name__ == "__main__":
     signals = predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30)
 
     # Backtest on raw (non-scaled) test set
-    df_test_raw = df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
+    df_test_raw = raw_df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
     equity, trades = backtest(df_test_raw, signals)
 
     # Evaluate performance
