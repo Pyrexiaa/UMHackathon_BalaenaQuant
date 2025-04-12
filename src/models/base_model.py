@@ -7,14 +7,7 @@ class BaseModel(ABC):
         self.model = None  # to be defined by subclasses
 
     @abstractmethod
-    def fit(self, X: pd.DataFrame, y: pd.Series):
-        """
-        Train the model.
-        """
-        pass
-
-    @abstractmethod
-    def predict(self, X: pd.DataFrame) -> pd.Series:
+    def predict(self, data):
         """
         Generate predictions (signals).
         """
