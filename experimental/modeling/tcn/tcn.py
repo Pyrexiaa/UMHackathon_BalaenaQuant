@@ -203,18 +203,17 @@ def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
     return np.array(signals)
 
 def backtest(df, signals):
-    """Backtest strategy based on trading signals."""
+    """Backtest strategy based on trading signals (0: buy, 1: hold, 2: sell)."""
     capital = 1000000
     position = 0
     entry_price = 0
-    prev_signal = 0
+    prev_signal = 1  # Initialize with hold signal
     equity = []
     trades = []
     pnl_list = []
     pos_list = []
     capital_list = []
     trades_flag = []
-
 
     for i in range(len(signals)):
         price = df.iloc[i]["close"]
@@ -223,22 +222,100 @@ def backtest(df, signals):
 
         # Exit condition
         if position != 0 and signals[i] != prev_signal:
-            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            if position > 0:  # Long position
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            elif position < 0:  # Short position
+                pnl = position * (entry_price - price) - abs(position * price) * FEE_RATE
             capital += pnl
             trades.append(pnl)
             position = 0  # Close position
             trade_occurred = 1  # Trade happened
 
-        # Entry condition
+        # Entry/Adding to position condition
+        if signals[i] == 0:  # Buy signal
+            available_capital = capital - abs(position) * price * FEE_RATE if position != 0 else capital
+            if available_capital > 0:
+                additional_shares = available_capital // price
+                if additional_shares > 0:
+                    capital -= additional_shares * price * FEE_RATE
+                    if position >= 0:
+                        new_total_shares = abs(position) + additional_shares
+                        entry_price = (abs(position) * entry_price + additional_shares * price) / new_total_shares if abs(position) > 0 else price
+                        position = new_total_shares
+                    else:  # Closing short and opening long
+                        pnl = position * (entry_price - price) - abs(position * price) * FEE_RATE
+                        capital += pnl
+                        trades.append(pnl)
+                        position = additional_shares
+                        entry_price = price
+                        trade_occurred = 1
+            prev_signal = signals[i]
+        elif signals[i] == 2:  # Sell signal
+            available_capital = capital - abs(position) * price * FEE_RATE if position != 0 else capital
+            if available_capital > 0:
+                additional_shares = available_capital // price
+                if additional_shares > 0:
+                    capital -= additional_shares * price * FEE_RATE
+                    if position <= 0:
+                        new_total_shares = abs(position) + additional_shares
+                        entry_price = (abs(position) * entry_price + additional_shares * price) / new_total_shares if abs(position) > 0 else price
+                        position = -new_total_shares
+                    else:  # Closing long and opening short
+                        pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                        capital += pnl
+                        trades.append(pnl)
+                        position = -additional_shares
+                        entry_price = price
+                        trade_occurred = 1
+            prev_signal = signals[i]
+        elif signals[i] == 1:
+            prev_signal = signals[i] # Hold signal
+
+        # Logging per step
+        current_equity = capital
+        if position > 0:
+            current_equity += position * price
+        elif position < 0:
+            current_equity += position * entry_price - position * price
+
+    # TODO: Edit backtest formula
+    capital, position, prev_signal = 1_000_000, 0, 0
+    equity, trades, pnl_list, pos_list, capital_list, trades_flag = [], [], [], [], [], []
+
+    for i in range(len(df)):
+        price = df.iloc[i]['close']
+
+        if prev_signal != 0 and signals[i] != prev_signal:
+            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+            capital += pnl
+            position = 0
+            trades.append(pnl)
+
         if signals[i] != 0 and position == 0:
             entry_price = price
             position = (capital // price) * signals[i]
             capital -= abs(position * price) * FEE_RATE
             prev_signal = signals[i]
 
-        # Logging per step
-        current_equity = capital + position * price
-        equity.append(current_equity)
+        # Apply Stop-Loss and Take-Profit:
+        if position != 0:
+            # Check for stop-loss condition (e.g., 3% loss)
+            if (price - entry_price) / entry_price < -0.03:
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                capital += pnl
+                position = 0
+                trades.append(pnl)
+                prev_signal = 0  # Reset signal after stop-loss
+
+            # Check for take-profit condition (e.g., 5% gain)
+            elif (price - entry_price) / entry_price > 0.05:
+                pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
+                capital += pnl
+                position = 0
+                trades.append(pnl)
+                prev_signal = 0  # Reset signal after take-profit
+
+        equity.append(capital + position * price)
         pnl_list.append(pnl)
         pos_list.append(position)
         capital_list.append(capital)
@@ -256,32 +333,20 @@ def backtest(df, signals):
     return np.array(equity), trades
 
 
+
 def evaluate_performance(equity, trades, set_name="Validation"):
     """Calculate performance metrics"""
     returns = np.diff(equity) / equity[:-1]
-    
-    # Sharpe Ratio
     sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
-    
-    # Max Drawdown
-    peak = equity[0]
-    max_dd = 0
-    for value in equity:
-        if value > peak:
-            peak = value
-        dd = (peak - value) / peak
-        if dd > max_dd:
-            max_dd = dd
-            
-    # Trade stats
+    max_dd = max((peak - val) / peak for peak, val in zip(np.maximum.accumulate(equity), equity))
     win_rate = np.mean(np.array(trades) > 0) if trades else 0
-    
+
     print(f"\n{set_name} Performance:")
     print(f"Sharpe Ratio: {sharpe:.2f}")
     print(f"Max Drawdown: {max_dd:.2%}")
     print(f"Total Trades: {len(trades)}")
     print(f"Win Rate: {win_rate:.2%}")
-    
+
     return {
         'sharpe': sharpe,
         'max_drawdown': max_dd,
