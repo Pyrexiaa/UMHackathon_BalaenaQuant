@@ -1,10 +1,12 @@
 from typing import Optional, Union
-from .base_feature import BaseFeature
+# from .base_feature import BaseFeature
 import pandas as pd
 import numpy as np
 from hmmlearn import hmm
 from typing import List
 import pickle
+from sklearn.cluster import KMeans
+
 
 # class HMMFeature(BaseFeature):
 #     def __init__(self, model, column: str = "close", window: Optional[Union[int, str]] = None):
@@ -78,4 +80,50 @@ def add_hmm_features(ori_df: pd.DataFrame,
     hidden_states = hmm_model.predict(df[feature_cols].values)
     df['hmm_state'] = hidden_states
     
+    return df
+
+
+def add_rolling_kmeans_cluster_feature(df: pd.DataFrame, 
+                                       feature_cols: List[str], 
+                                       cluster_col_name: str = 'kmeans_cluster', 
+                                       n_clusters: int = 3,
+                                       window_size: int = None) -> pd.DataFrame:
+    """
+    Add rolling KMeans cluster label based on selected feature columns.
+
+    Parameters:
+        df : pd.DataFrame
+            Input DataFrame.
+        feature_cols : List[str]
+            Columns used for clustering.
+        cluster_col_name : str
+            Name of the new column to store the cluster label.
+        n_clusters : int
+            Number of clusters for KMeans.
+        window_size : int
+            Rolling window size for fitting KMeans.
+
+    Returns:
+        pd.DataFrame with a new column of rolling cluster labels.
+    """
+    df = df.copy()
+    df[cluster_col_name] = np.nan  # Initialize output column
+
+    if window_size is None:
+        # If no window size is provided, fit KMeans on the entire DataFrame
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        labels = kmeans.fit_predict(df[feature_cols].values)
+        df[cluster_col_name] = labels
+    else:
+        for i in range(window_size, len(df)):
+            window_data = df.iloc[i - window_size:i][feature_cols]
+            if window_data.isnull().values.any():
+                continue  # skip if NaN exists in window
+
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+            labels = kmeans.fit_predict(window_data.values)
+
+            # Assign last point's label to the current row
+            df.at[df.index[i - 1], cluster_col_name] = labels[-1]
+
     return df
