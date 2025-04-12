@@ -29,7 +29,9 @@ class APILoader(BaseLoader):
                 # Construct the endpoint with query parameters
                 endpoint = self.datasource["endpoints"][metric]
                 if "?" not in endpoint:
-                    endpoint_with_query_param = f"{endpoint}?window={window}&limit={limit}"
+                    endpoint_with_query_param = (
+                        f"{endpoint}?window={window}&limit={limit}"
+                    )
                 else:
                     endpoint_with_query_param = f"{endpoint}&window={window}&limit={limit}"
                 

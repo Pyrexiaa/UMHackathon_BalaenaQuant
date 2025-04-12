@@ -33,3 +33,8 @@ Contains the strategy framework and specific implementations of trading strategi
 ### Prerequisites
 - Python 3.10
 - Required dependencies (can be installed via requirements.txt) (Some are extra)
+
+## Presentation Slides
+https://www.canva.com/design/DAGkV7mcnvA/eA4PIpeJ23_QIn8wIw_kfg/edit?utm_content=DAGkV7mcnvA&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+
+## Architecture Diagram
