@@ -1,6 +1,6 @@
 from .base_metrics import BaseMetrics
 import numpy as np
-from ..config import Config
+from ..config import BaseConfig
 
 class Metrics(BaseMetrics):
     def total_return(self):
@@ -57,7 +57,7 @@ class Metrics(BaseMetrics):
     
     def trade_frequency(self, signals):
         """Returns trade frequency (trades per data row)."""
-        trades = np.sum((signals == Config.BUY_SIGNAL) | (signals == Config.SELL_SIGNAL))  # Count number of signals (trades)
+        trades = np.sum((signals == BaseConfig.BUY_SIGNAL) | (signals == BaseConfig.SELL_SIGNAL))  # Count number of signals (trades)
         total = len(signals)
         frequency = (trades / total) * 100 if total > 0 else 0
         return frequency

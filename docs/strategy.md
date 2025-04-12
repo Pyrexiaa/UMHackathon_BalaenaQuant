@@ -19,8 +19,8 @@ A machine learning-driven trading strategy that converts model predictions into 
 
 ```py
 MLStrategy(model: Any, 
-           buy_threshold: float = Config.BUY_THRESHOLD, 
-           sell_threshold: float = Config.SELL_THRESHOLD)
+           buy_threshold: float = BaseConfig.BUY_THRESHOLD, 
+           sell_threshold: float = BaseConfig.SELL_THRESHOLD)
 ```
 
 |Parameter	|Type|	Description|
@@ -64,7 +64,7 @@ A pandas.Series of integer trading signals:
 
     4. Handles prediction alignment:
 
-    5. Skips early rows based on the model’s window_size (or Config.WINDOW_SIZE).
+    5. Skips early rows based on the model’s window_size (or BaseConfig.WINDOW_SIZE).
 
     6. Pads warm-up period with Hold signals.
 

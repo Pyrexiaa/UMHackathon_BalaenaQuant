@@ -5,9 +5,15 @@ class BaseModel(ABC):
         self.model = None
 
     @abstractmethod
+    def fit(self, data):
+        """
+        Train the model.
+        """
+        pass
+
+    @abstractmethod
     def predict(self, data):
         """
         Generate predictions (signals).
         """
         pass
-

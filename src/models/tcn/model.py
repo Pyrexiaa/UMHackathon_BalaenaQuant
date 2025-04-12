@@ -2,8 +2,8 @@ import pandas as pd
 import torch
 import joblib
 import numpy as np
-from .base_model import BaseModel
-from ..config import Config
+from ..base_model import BaseModel
+from ...config import BaseConfig, TCNConfig
 from .model_architecture import TCNClassifier
 
 
@@ -12,7 +12,7 @@ class TCNModel(BaseModel):
     A Temporal Convolution Network (TCN) model used to generate signals.
     """
     
-    def __init__(self, model_path=Config.TCN_MODEL_PATH, scaler_path=Config.TCN_SCALER_PATH, device=None):
+    def __init__(self, model_path=TCNConfig.TCN_MODEL_PATH, scaler_path=TCNConfig.TCN_SCALER_PATH, device=None):
         """
         Initialize the TCN model by loading the model and scaler.
 
@@ -88,8 +88,8 @@ class TCNModel(BaseModel):
         :return: Numpy array representing time-series windows
         """
         X = []
-        for i in range(Config.WINDOW_SIZE, len(df)):
-            window = df.iloc[i - Config.WINDOW_SIZE:i].values
+        for i in range(BaseConfig.WINDOW_SIZE, len(df)):
+            window = df.iloc[i - BaseConfig.WINDOW_SIZE:i].values
             X.append(window)
         return np.array(X)
 

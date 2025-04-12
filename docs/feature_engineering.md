@@ -120,7 +120,7 @@ Visualizes the most important features using one of several techniques:
 ```py
 top_features = plot_feature_importance(
     df=data,
-    target_col="future_return",
+    target_col="target",
     feature_cols=feature_list,
     method="mutual_info",
     top_n=15,
