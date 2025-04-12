@@ -8,7 +8,8 @@ from src.models import get_model
 
 if __name__ == "__main__":
     
-    file_path = os.path.join(os.path.dirname(__file__), 'sample_data', 'btc_data.csv')
+    file_path = os.path.join(os.path.dirname(__file__), 'sample_data', 'btc_data_with_target_modified.csv')
+    
     # Load data
     df = pd.read_csv(file_path, index_col=0, parse_dates=True)
 
@@ -22,6 +23,4 @@ if __name__ == "__main__":
     bt = Backtester(data=df, strategy=strategy)
     bt.run(forward_test=True, forward_years=1)
 
-    bt.generate_report()
-    
     bt.plot_results()
