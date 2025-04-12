@@ -28,9 +28,9 @@ bt = Backtester(data, strategy)
 
 ---
 
-## 🚀 Run Backtest
+## Run Backtest
 
-### `run()`
+#### `run()`
 
 ```python
 # Run backtest and forward test
@@ -55,9 +55,9 @@ Run the backtest with optional forward testing.
 
 ---
 
-## 📊 Visualization
+## Visualization
 
-### `plot_results()`
+#### `plot_results()`
 
 ```python
 plot_results()
@@ -70,9 +70,9 @@ Generates:
 
 ---
 
-## 📄 Reporting
+## Reporting
 
-### `generate_report()`
+#### `generate_report()`
 ```python
 generate_report(phase: str = 'all')
 ```
@@ -99,7 +99,7 @@ performance_metrics(phase: str = 'all') -> Dict
 
 ---
 
-## 💾 Exporting
+##  Exporting
 
 #### `export_data()`
 Exports Results DataFrame to CSV and Trades log to CSV
@@ -116,7 +116,7 @@ export_metrics(filepath="output/metrics.csv")
 ---
 
 
-## 📌 Strategy Interface
+##  Strategy Interface
 
 Your strategy class should implement the following method:
 
