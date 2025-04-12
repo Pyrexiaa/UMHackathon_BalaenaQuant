@@ -1,1 +1,1 @@
-["close", "price_range", "price_momentum", "volume_zscore", "taker_buy_ratio"]
+["macd", "kmeans_cluster", "hmm_state", "volume_zscore", "taker_buy_ratio", "close"]

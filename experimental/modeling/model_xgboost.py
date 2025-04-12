@@ -17,11 +17,11 @@ import sys
 # Add the path to your 'src' folder dynamically
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
 
-from features.technical_indicators import MovingAverageFeature, VolatilityFeature
+# from features.technical_indicators import MovingAverageFeature, VolatilityFeature
 
 # Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_modified.csv"
+DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
 RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
 MODEL_DIR = PROJECT_ROOT / "experimental/modeling/models"
 FEE_RATE = 0.0006
@@ -73,79 +73,69 @@ class XGBoostTradingModel:
         )
 
     # def prepare_features(self, train, val, test):
-    #     # Add moving stats
+    #     # Add dynamic features to all datasets
     #     for df in [train, val, test]:
-    #         df['close_7d_ma'] = df['close'].rolling(7).mean()
-    #         df['close_30d_std'] = df['close'].rolling(30).std()
-    #         df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
-
-    #     # Feature engineering: deltas
-    #     for df in [train, val, test]:
-    #         if 'exchange_whale_ratio' in df.columns and 'start_time_exchange_whale_ratio' in df.columns:
-    #             df['whale_ratio_diff'] = df['exchange_whale_ratio'] - df['start_time_exchange_whale_ratio']
-    #         if 'estimated_leverage_ratio' in df.columns and 'start_time_estimated_leverage_ratio' in df.columns:
-    #             df['delta_estimated_leverage_ratio'] = df['estimated_leverage_ratio'] - df['start_time_estimated_leverage_ratio']
-
-    #         # Price-based features
     #         df['price_range'] = df['high'] - df['low']
     #         df['price_momentum'] = df['close'] - df['open']
-    #         df['price_return_ratio'] = df['close'] / df['open']
 
-    #         # Flow & transfer features
-    #         df['net_address_flow'] = df['addresses_count_inflow'] - df['addresses_count_outflow']
-    #         df['net_transaction_flow'] = df['transactions_count_inflow'] - df['transactions_count_outflow']
-    #         df['transfer_skew'] = df['tokens_transferred_mean'] / df['tokens_transferred_median']
-    #         df['net_liquidations_usd'] = df['long_liquidations_usd'] - df['short_liquidations_usd']
-
-    #     # Final feature list
+    #     # Updated feature list with technical indicators
     #     potential_features = [
-    #         'close_7d_ma', 'close_30d_std', 'price_range', 'price_momentum', 'volume_zscore',
-    #         'net_address_flow', 'net_transaction_flow', 'net_liquidations_usd', 'taker_buy_ratio',
-    #         'open_interest'
+    #         # Price action
+    #         'close', 'price_range', 'price_momentum',
+            
+    #         # Technical indicators (optimized)
+    #         'sma_50', 'sma_200', 'ema_5', 'rsi_14', 'macd', 'macd_signal',  # Removed some of the redundant EMAs
+    #         'macd_crossover', 'volatility_20', 'price_change_1',
+            
+    #         # Existing features
+    #         'volume_zscore', 'net_liquidations_usd', 'taker_buy_ratio'
     #     ]
 
-    #     self.features = [f for f in potential_features if all(f in df.columns for df in [train, val, test])]
-    #     if not self.features:
-    #         raise ValueError("No common features found across all datasets!")
-
-    #     print(f"Using features: {self.features}")
-
+    #     # Final feature selection
+    #     self.features = [f for f in potential_features 
+    #                     if all(f in d.columns for d in [train, val, test])]
+        
+    #     # Scaling and return
     #     X_train = self.scaler.fit_transform(train[self.features])
     #     X_val = self.scaler.transform(val[self.features])
     #     X_test = self.scaler.transform(test[self.features])
-
+        
     #     return X_train, X_val, X_test, train['target'], val['target'], test['target']
 
     def prepare_features(self, train, val, test):
-        # Add dynamic features to all datasets
-        for df in [train, val, test]:
-            df['price_range'] = df['high'] - df['low']
-            df['price_momentum'] = df['close'] - df['open']
-
-        # Updated feature list with technical indicators
-        potential_features = [
+        # Use all pre-engineered features from the new dataset
+        self.features = [
+            # Technical indicators
+            'rsi_obv_signal', 'bollinger_upper', 'bollinger_lower', 
+            'macd', 'kmeans_cluster', 'hmm_state',
+            
+            # Sentiment and volume features
+            'sentiment_score', 'volume_zscore', 'taker_buy_ratio',
+            
             # Price action
-            'close', 'price_range', 'price_momentum',
+            'price_range', 'price_momentum', 'close',
             
-            # Technical indicators (optimized)
-            'sma_50', 'sma_200', 'ema_5', 'rsi_14', 'macd', 'macd_signal',  # Removed some of the redundant EMAs
-            'macd_crossover', 'volatility_20', 'price_change_1',
-            
-            # Existing features
-            'volume_zscore', 'net_liquidations_usd', 'taker_buy_ratio'
+            # Advanced features
+            'volatility_20', 'volume_obv', 'liquidation_skew'
         ]
 
-        # Final feature selection
-        self.features = [f for f in potential_features 
-                        if all(f in d.columns for d in [train, val, test])]
+        # Verify feature existence
+        available_features = []
+        for f in self.features:
+            if all(f in df.columns for df in [train, val, test]):
+                available_features.append(f)
+            else:
+                print(f"Warning: {f} missing in some datasets")
         
-        # Scaling and return
+        self.features = available_features
+        print(f"Final features: {self.features}")
+
+        # Scale features
         X_train = self.scaler.fit_transform(train[self.features])
         X_val = self.scaler.transform(val[self.features])
         X_test = self.scaler.transform(test[self.features])
         
         return X_train, X_val, X_test, train['target'], val['target'], test['target']
-
 
     def train_model(self, X_train, y_train, X_val, y_val):
         self.model =XGBClassifier(
@@ -156,11 +146,11 @@ class XGBoostTradingModel:
             gamma=0.2,
             reg_alpha=0.1,
             reg_lambda=0.1,
-            n_estimators=35,
+            n_estimators=50,
             learning_rate=0.01,
-            max_depth=6,
-            subsample=0.6,
-            colsample_bytree=0.6,
+            max_depth=8,
+            subsample=0.8,
+            colsample_bytree=0.8,
             early_stopping_rounds=50,
             eval_metric='mlogloss'
         ) 
@@ -200,7 +190,7 @@ class XGBoostTradingModel:
         return signals
 
     def backtest(self, df, signals, stop_loss=0.03, take_profit=0.05):
-        capital, position, prev_signal = 1_000_000, 0, 0
+        capital, position, entry_price, prev_signal = 1_000_000, 0, None , 0
         equity, trades = [], []
 
         for i in range(len(df)):
