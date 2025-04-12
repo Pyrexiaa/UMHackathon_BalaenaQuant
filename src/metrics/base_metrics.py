@@ -17,12 +17,12 @@ class BaseMetrics(ABC):
         """
         Initialize base metrics calculator.
         
-        :params equity: Series of portfolio values over time
-        :params returns: Series of daily returns
-        :params trades: DataFrame containing trade records
-        :params risk_free_rate: Annual risk-free rate for risk-adjusted metrics
-        :params trading_fee: Fee per trade (default 0.06%)
-        :params signals: Series of trading signals (for frequency calculations)
+        :param equity: Series of portfolio values over time
+        :param returns: Series of daily returns
+        :param trades: DataFrame containing trade records
+        :param risk_free_rate: Annual risk-free rate for risk-adjusted metrics
+        :param trading_fee: Fee per trade (default 0.06%)
+        :param signals: Series of trading signals (for frequency calculations)
         """
         self.equity = equity
         self.returns = returns

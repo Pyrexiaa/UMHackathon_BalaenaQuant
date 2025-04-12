@@ -21,6 +21,6 @@ if __name__ == "__main__":
 
     # Run backtest
     bt = Backtester(data=df, strategy=strategy)
-    bt.run(forward_test=True, forward_years=1)
-
+    bt.run(forward_test=True, forward_start_date="2024-01-01")
+    bt.export_to_csv("my_results.csv", "my_trades.csv")
     bt.plot_results()

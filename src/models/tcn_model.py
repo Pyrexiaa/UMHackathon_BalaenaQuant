@@ -58,8 +58,11 @@ class TCNModel(BaseModel):
             'volume_zscore',
             'taker_buy_ratio',
             'open_interest',
-            'positions',
-            'close', 'open', 'high', 'low', 'volume'
+            'close', 
+            'open', 
+            'high', 
+            'low', 
+            'volume'
         ]
 
         # Select and clean the relevant columns
@@ -73,11 +76,8 @@ class TCNModel(BaseModel):
         :param df: The input DataFrame
         :return: The normalized DataFrame
         """
-        features = df.drop(columns=["positions"], errors='ignore')
-        scaled = self.scaler.transform(features)
-        df_scaled = pd.DataFrame(scaled, columns=features.columns)
-        if "positions" in df.columns:
-            df_scaled["positions"] = df["positions"].values
+        scaled = self.scaler.transform(df)
+        df_scaled = pd.DataFrame(scaled, columns=df.columns)
         return df_scaled
 
     def preprocess(self, df):
@@ -89,7 +89,7 @@ class TCNModel(BaseModel):
         """
         X = []
         for i in range(Config.WINDOW_SIZE, len(df)):
-            window = df.iloc[i - Config.WINDOW_SIZE:i].drop(columns=["positions"], errors="ignore").values
+            window = df.iloc[i - Config.WINDOW_SIZE:i].values
             X.append(window)
         return np.array(X)
 
