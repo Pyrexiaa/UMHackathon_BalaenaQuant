@@ -15,7 +15,7 @@ if __name__ == "__main__":
     df = pd.read_csv(file_path, index_col=0, parse_dates=True)
 
     # Load model
-    model = get_model("TCN")
+    model = get_model("XGBOOST")
 
     # Initialize strategy
     strategy = MLStrategy(model=model)

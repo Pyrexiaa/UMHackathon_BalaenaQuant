@@ -1,1 +1,1 @@
-["delta_estimated_leverage_ratio", "close_7d_ma", "close_30d_std", "volume_zscore", "taker_buy_ratio", "open_interest"]
+["future_return", "price_change_1", "ema_5_8_13_cross", "taker_sell_ratio", "taker_buy_ratio", "taker_buy_sell_ratio", "rsi_14", "rsi_obv_signal_14", "bb_signal_20", "coinbase_premium_index_usdt_adjusted"]
