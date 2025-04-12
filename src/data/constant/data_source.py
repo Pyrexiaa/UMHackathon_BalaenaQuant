@@ -7,10 +7,10 @@ data_source = {
         "base_url": "https://api.datasource.cybotrade.rs",
         "api_key": os.getenv("CYBOTRADE_API_KEY"),
         "endpoints": {
-            "reserve": "/cryptoquant/btc/exchange-flows/reserve?exchange=binance&window=day&limit=2",
-            "coinbase_premium_index": "/cryptoquant/btc/market-data/coinbase-premium-index?window=hour&limit=10",
-            "taker-buy-sell-stats": "/cryptoquant/btc/market-data/taker-buy-sell-stats?window=hour&exchange=bitmex&limit=46211",
-            "liquidations": "/cryptoquant/btc/market-data/liquidations?window=hour&exchange=bitmex&limit=46211",
+            "reserve": "/cryptoquant/btc/exchange-flows/reserve?exchange=binance",
+            "coinbase_premium_index": "/cryptoquant/btc/market-data/coinbase-premium-index",
+            "taker-buy-sell-stats": "/cryptoquant/btc/market-data/taker-buy-sell-stats?exchange=binance",
+            "liquidations": "/cryptoquant/btc/market-data/liquidations?exchange=binance",
         },
         "topics": {
             "difficulty": "cryptoquant|btc/network-data/difficulty?window=hour",
