@@ -268,8 +268,9 @@ class Backtester:
         ax3.set_title('Trading Signals')
         ax3.grid(True, linestyle='--', alpha=0.7)
         ax3.legend()
-
+        
         plt.tight_layout()
+        plt.savefig("output/") 
         plt.show()
 
     def generate_report(self, phase: str = 'all'):
@@ -348,7 +349,7 @@ class Backtester:
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]
         print(tabulate(info_data + perf_data, tablefmt="plain"))
 
-    def export_to_csv(self, results_path='output/backtest_results.csv', trades_path='output/trade_log.csv'):
+    def export_data(self, results_path='output/backtest_results.csv', trades_path='output/trade_log.csv'):
         """
         Export the results and trades to CSV files.
 
@@ -357,12 +358,20 @@ class Backtester:
         """
         if self.results is not None:
             self.results.to_csv(results_path)
-            print(f"[✓] Results saved to {results_path}")
+            print(f"Results saved to {results_path}")
         else:
-            print("[!] No results to export.")
+            print("No results to export.")
 
         if self.trades is not None:
             self.trades.to_csv(trades_path)
-            print(f"[✓] Trades saved to {trades_path}")
+            print(f"Trades saved to {trades_path}")
         else:
-            print("[!] No trades to export.")
+            print("No trades to export.")
+            
+    def export_metrics(self, filepath="output/metrics.csv"):
+        """Export calculated performance metrics to a CSV file."""
+        if self.metrics is None:
+            raise ValueError("No metrics available. Run backtest first.")
+
+        metrics_df = pd.DataFrame([self.metrics])  # Convert dict to DataFrame
+        metrics_df.to_csv(filepath, index=False)
