@@ -67,7 +67,8 @@ if __name__ == "__main__":
 
 
 ## Presentation Slides
-[Slides Link]([https://www.python.org/downloads/](https://www.canva.com/design/DAGkV7mcnvA/eN3IcmLJmv-_Hmy_4f3bnA/view?utm_content=DAGkV7mcnvA&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h61e831623c))
+[Slides Link](https://www.canva.com/design/DAGkV7mcnvA/eN3IcmLJmv-_Hmy_4f3bnA/view?utm_content=DAGkV7mcnvA&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h61e831623c)
+
 
 ## Framework Architecture Diagram 
 
