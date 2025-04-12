@@ -1,5 +1,6 @@
 import os
 import joblib
+from .tcn_model import TCNModel
 
 DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "defaults")
 
@@ -22,17 +23,12 @@ class ModelUtils:
         return joblib.load(path)
 
     @staticmethod
-    def get_model(name: str):
+    def get_model(name: str, **kwargs):
         """
         Retrieve a model by name from the defaults directory.
 
-        :param name: Model name (e.g., "xgboost")
+        :param name: Model name 
         :return: Loaded model object
         """
-        filename = f"{name}.pkl"
-        path = os.path.join(DEFAULT_MODEL_DIR, filename)
-
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Model '{filename}' not found in defaults directory.")
-        
-        return ModelUtils.load_model(path)
+        if name == "tcn":
+            return TCNModel(**kwargs)
