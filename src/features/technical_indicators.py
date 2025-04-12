@@ -1,17 +1,21 @@
 import pandas as pd
+import ta.volume
 from .base_feature import BaseFeature
 from typing import List
+import numpy as np
+import ta
 
-class MovingAverageFeature(BaseFeature):
-    def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        df[self.feature_name] = df[self.column].rolling(self.window).mean()
-        return df
+# class MovingAverageFeature(BaseFeature):
+#     def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
+#         df[self.feature_name] = df[self.column].rolling(self.window).mean()
+#         return df
 
-class VolatilityFeature(BaseFeature):
-    def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        returns = df[self.column].pct_change()
-        df[self.feature_name] = returns.rolling(self.window).std()
-        return df
+# class VolatilityFeature(BaseFeature):
+#     def add_features(self, df: pd.DataFrame) -> pd.DataFrame:
+#         returns = df[self.column].pct_change()
+#         df[self.feature_name] = returns.rolling(self.window).std()
+#         return df
+
 
 class FeatureTechnicalIndicators(BaseFeature):
     def __init__(self, df: pd.DataFrame, price_col: str = 'close'):
@@ -83,9 +87,24 @@ class FeatureTechnicalIndicators(BaseFeature):
             
             # Add RSI signals when RSI crosses above 70 (overbought = sell) or below 30 (oversold = buy)
             # https://www.investopedia.com/terms/r/rsi.asp
-            self.df[f'rsi_{window}_signal'] = 0
-            self.df.loc[self.df[f'rsi_{window}'] > 70, f'rsi_{window}_signal'] = -1 # Bearish signal 
-            self.df.loc[self.df[f'rsi_{window}'] < 30, f'rsi_{window}_signal'] = 1 # Bullish signal 
+            # self.df[f'rsi_{window}_signal'] = 0
+            # self.df.loc[self.df[f'rsi_{window}'] > 70, f'rsi_{window}_signal'] = -1 # Bearish signal 
+            # self.df.loc[self.df[f'rsi_{window}'] < 30, f'rsi_{window}_signal'] = 1 # Bullish signal 
+            
+            # obv
+            self.df['obv'] = ta.volume.OnBalanceVolumeIndicator(
+                close=self.df[self.price_col],
+                volume=self.df['volume'],
+                fillna=True
+            ).on_balance_volume()
+            
+            self.df[f'rsi_obv_signal_{window}'] = 0
+            self.df.loc[(self.df[f'rsi_{window}'] > 70) & (self.df['obv'] > self.df['obv'].rolling(window=window).mean())
+                        & (self.df['obv'] > self.df['obv'].shift(1))
+                        , f'rsi_obv_signal_{window}'] = -1 # Bearish signal
+            self.df.loc[(self.df[f'rsi_{window}'] < 30) & (self.df['obv'] < self.df['obv'].rolling(window=window).mean())
+                        & (self.df['obv'] < self.df['obv'].shift(1))
+                        , f'rsi_obv_signal_{window}'] = 1 # Bullish signal
             
     def add_macd(self, fast_window: int = 12, slow_window: int = 26, signal_window: int = 9):
         """Add Moving Average Convergence Divergence (MACD) to the dataframe.
@@ -121,10 +140,56 @@ class FeatureTechnicalIndicators(BaseFeature):
         self.df.drop(columns=['macd_signal'], inplace=True)
         
     def add_price_change(self, windows: List[int] = [1]):
-        """Add price change features to the dataframe.
+        """Add price percentage change features to the dataframe.
         Args:
             windows (List[int], optional): List of window sizes for price change calculation. Defaults to [1].
         """
         for window in windows:
             # Calculate price change
             self.df[f'price_change_{window}'] = self.df[self.price_col].pct_change(periods=window)    
+            
+    def add_volatility(self, windows: List[int] = [24, 72, 168]):
+        """Add volatility features to the dataframe.
+        Args:
+            windows (List[int], optional): List of window sizes for volatility calculation. Defaults to [24, 72, 168].
+        """
+        for window in windows:
+            self.df["log_return"] = np.log(self.df[self.price_col] / self.df[self.price_col].shift(1))
+            self.df[f'volatility_{window}'] = self.df["log_return"].rolling(window=window).std()
+            self.df.drop(columns=["log_return"], inplace=True)
+            
+    def add_bollinger_bands(self, windows: List[int] = [20], num_std: int = 2):
+        """Add Bollinger Bands to the dataframe.
+        Args:
+            windows (List[int], optional): List of window sizes for Bollinger Bands calculation. Defaults to [20].
+            num_std (int, optional): Number of standard deviations for upper and lower bands. Defaults to 2.
+        """
+        for window in windows:
+            # Calculate Bollinger Bands
+            rolling_mean = self.df[self.price_col].rolling(window=window).mean() # bb_middle
+            rolling_std = self.df[self.price_col].rolling(window=window).std()
+            self.df[f'bb_upper_{window}'] = rolling_mean + (rolling_std * num_std)
+            self.df[f'bb_lower_{window}'] = rolling_mean - (rolling_std * num_std)
+
+            # Add Bollinger Band signals
+            # Buy when price crosses below the lower band, Sell when price crosses above the upper band
+            # https://www.investopedia.com/terms/b/bollingerbands.asp
+            # self.df[f'bb_signal_{window}'] = 0
+            self.df[f'bb_signal_{window}'] = self.df.apply(lambda row: 1 if row[self.price_col] < row[f'bb_lower_{window}'] # buy signal
+                                                           else (-1 if row[self.price_col] > row[f'bb_upper_{window}'] else 0), axis=1) # sell signal
+            
+            # drop the columns 'bb_upper', 'bb_lower'
+            self.df.drop(columns=[f'bb_upper_{window}', f'bb_lower_{window}'], inplace=True)
+
+    def add_all_features(self):
+        """Add all technical indicators to the dataframe.
+        """
+        self.add_sma()
+        self.add_ema()
+        self.add_rsi()
+        self.add_macd()
+        self.add_price_change()
+        self.add_volatility()
+        self.add_bollinger_bands()         
+        
+    
