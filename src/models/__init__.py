@@ -1,2 +1,7 @@
 from .base_model import BaseModel
-from .xgboost_model import XGBoostModel
+from .utils import ModelUtils
+
+__all__ = [
+    "BaseModel",
+    "ModelUtils",
+]
