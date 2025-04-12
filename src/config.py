@@ -12,9 +12,9 @@ class TCNConfig:
     TCN_SCALER_PATH = "src/models_weights/tcn/scaler.pkl"
 
 class XGBConfig:
-    XGB_MODEL_PATH = "src/models/trained/xgboost/model.pkl"
-    XGB_SCALER_PATH = "src/models/trained/xgboost/scaler.pkl"
-    XGB_FEATURE_PATH = "src\models\xgb_features.json"
+    XGB_MODEL_PATH = "src/models_weights/xgboost/xgboost_model.pkl"
+    XGB_SCALER_PATH = "src/models_weights/xgboost/scaler.pkl"
+    XGB_FEATURE_PATH = "src/models_weights/xgboost/features.json"
 
 class CNNConfig:
     CNN_MODEL_PATH = "src/models_weights/cnn/model.pth"
@@ -24,5 +24,10 @@ class GNNConfig:
     HIDDEN_FEATURES = 4
     GNN_MODEL_PATH = "src/models_weights/gnn/model.pth"
     GNN_SCALER_PATH = "src/models_weights/gnn/scaler.pkl"
+
+class TabNetConfig:
+    TABNET_MODEL_PATH = "src/models_weights/tabnet/model.zip"
+    TABNET_SCALER_PATH = "src/models_weights/tabnet/scaler.pkl"
+    TABNET_FEATURE_NAMES_PATH = "src/models_weights/xgboost/features.json"
 
 

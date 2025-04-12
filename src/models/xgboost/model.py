@@ -3,44 +3,30 @@ import joblib
 import numpy as np
 from pathlib import Path
 import json
-from .base_model import BaseModel
-from ..config import Config
+from ..base_model import BaseModel
+from ...config import BaseConfig, XGBConfig
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 
 class XGBoostModel(BaseModel):
     """
-    XGBoost Model with TCN-style interface for signal generation
+    XGBoost Model for trading signals.
     """
     
-    def __init__(self, model_path=Config.XGB_MODEL_PATH, 
-                 scaler_path=Config.XGB_SCALER_PATH,
-                 feature_path=Config.XGB_FEATURE_PATH):
+    def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, 
+                 scaler_path=XGBConfig.XGB_SCALER_PATH,
+                 feature_path=XGBConfig.XGB_FEATURE_PATH):
         super().__init__()
         self.model = None
         self.scaler = StandardScaler()
-        self.feature_groups = {
-            'price_technical': [
-                'future_return', 'price_change_1', 'ema_5_8_13_cross', 
-                'taker_sell_ratio', 'taker_buy_ratio', 'taker_buy_sell_ratio', 
-                'rsi_14', 'rsi_obv_signal_14', 'bb_signal_20', 
-                'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
-                'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 
-                'macd', 'addresses_count_sender', 'addresses_count_active', 
-                'blockreward', 'tokens_transferred_mean', 'long_liquidations', 
-                'addresses_count_receiver'
-            ]
-        }
+        self.feature_groups = []
         self.selected_features = []
         self.class_weights = {0: 5, 1: 1, 2: 5}
         self.thresholds = {
-            'buy': Config.BUY_THRESHOLD,
-            'sell': Config.SELL_THRESHOLD,
-            'hold': Config.HOLD_THRESHOLD
+            'buy': BaseConfig.BUY_THRESHOLD,
+            'sell': BaseConfig.SELL_THRESHOLD
         }
-        
-        if model_path.exists():
-            self.load(model_path.parent)
+        self.load(model_path)
 
     def prepare_features(self, df):
         """Feature engineering pipeline"""
@@ -88,12 +74,12 @@ class XGBoostModel(BaseModel):
         
         # Signal conversion
         signals = np.ones(len(proc_df), dtype=int)  # Default hold
-        signals[probs[:, 2] > self.thresholds['buy']] = Config.BUY_SIGNAL
-        signals[probs[:, 0] > self.thresholds['sell']] = Config.SELL_SIGNAL
+        signals[probs[:, 2] > self.thresholds['buy']] = BaseConfig.BUY_SIGNAL
+        signals[probs[:, 0] > self.thresholds['sell']] = BaseConfig.SELL_SIGNAL
         
         # Apply hold threshold
         max_probs = probs.max(axis=1)
-        signals[max_probs < self.thresholds['hold']] = Config.HOLD_SIGNAL
+        signals[max_probs < self.thresholds['hold']] = BaseConfig.HOLD_SIGNAL
         
         return pd.Series(signals, index=data.index)
 
@@ -113,10 +99,13 @@ class XGBoostModel(BaseModel):
         y_val = val_data['target']
 
         # Initialize model
+
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
+            self.features = json.load(f)
+    
         self.model = XGBClassifier(
             objective='multi:softprob',
-            num_class=3,
-            **Config.XGB_PARAMS
+            num_class=3
         )
 
         # Train with class weights
@@ -145,7 +134,7 @@ class XGBoostModel(BaseModel):
         path = Path(path)
         joblib.dump(self.model, path / "model.pkl")
         joblib.dump(self.scaler, path / "scaler.pkl")
-        with open(path / "features.json", 'w') as f:
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
             json.dump({
                 'feature_groups': self.feature_groups,
                 'selected_features': self.selected_features
@@ -154,13 +143,16 @@ class XGBoostModel(BaseModel):
     def load(self, path):
         """Load complete model configuration"""
         path = Path(path)
-        self.model = joblib.load(path / "model.pkl")
-        self.scaler = joblib.load(path / "scaler.pkl")
-        with open(path / "features.json", 'r') as f:
+        self.model = joblib.load(XGBConfig.XGB_MODEL_PATH)
+        self.scaler = joblib.load(XGBConfig.XGB_SCALER_PATH)
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
             features = json.load(f)
-            self.feature_groups = features['feature_groups']
-            self.selected_features = features['selected_features']
+            self.feature_groups = features
+            self.selected_features = features
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         return pd.Series(self.model.predict(X), index=X.index)
+    
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.model.fit(X, y)
 

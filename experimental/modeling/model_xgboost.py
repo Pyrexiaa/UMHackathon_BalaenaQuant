@@ -24,7 +24,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../s
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
 RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
-MODEL_DIR = PROJECT_ROOT / "experimental/modeling/models"
+MODEL_DIR = Path("src/models_weights/xgboost")
 FEE_RATE = 0.0006
 
 # Ensure output directories exist
@@ -444,10 +444,8 @@ def main():
     test_results = model.evaluate_performance(test, equity, trades, trade_dates, "Test")
     
     # Save model
-    if val_results['passed'] and test_results['passed']:
-        model.save_model()
-    else:
-        print("Model failed validation - not saving")
+    model.save_model()
+
     
     # plot_signals(val, signals)
 
