@@ -11,7 +11,7 @@ class BaseStrategy(ABC):
         """
         Generate trading signals from input data.
         
-        :params X: DataFrame of features or price data.
-        :return: Series of trading signals (1 = Buy, -1 = Sell, 0 = Hold)
+        :param X: DataFrame of features or price data.
+        :return: Series of trading signals (2 = Buy, 0 = Sell, 1 = Hold)
         """
         pass

@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 from .base_strategy import BaseStrategy
 from ..config import Config
+import torch
 
 class MLStrategy(BaseStrategy):
     """
@@ -11,8 +12,8 @@ class MLStrategy(BaseStrategy):
 
     def __init__(self, model: Any, buy_threshold: float = Config.BUY_THRESHOLD, sell_threshold: float = Config.SELL_THRESHOLD):
         """
-        :params model: A trained ML model
-        :params threshold: Confidence threshold for signals
+        :param model: A trained ML model
+        :param threshold: Confidence threshold for signals
         """
         self.model = model
         self.buy_threshold = buy_threshold
@@ -22,24 +23,57 @@ class MLStrategy(BaseStrategy):
         """
         Generate buy/hold/sell signals using the model's predicted probabilities.
         
-        :params X: DataFrame of features or price data.
-        :returns: pd.Series: Signals: 2 (Buy), 1 (Hold), 0(Sell)
+        :param X: DataFrame of features or price data with DateTimeIndex
+        :return: Trading signals (2=Buy, 1=Hold, 0=Sell) aligned with input index
         """
-        probs = self.model.predict(X)
+        # Get model predictions
+        try:
+            probs = self.model.predict(X)
+            probs = np.asarray(probs)
             
-        # Ensure signals are only created for the valid length of the input data
+            # Validate predictions
+            if len(probs) == 0:
+                return pd.Series(Config.HOLD_SIGNAL, index=X.index)
+                
+            if probs.shape[1] != 3:  # Should have 3 classes (Buy/Hold/Sell)
+                raise ValueError(f"Expected 3 output probabilities, got {probs.shape[1]}")
+                
+            if not np.allclose(probs.sum(axis=1), 1, rtol=1e-3):
+                raise ValueError("Probabilities must sum to 1")
+                
+        except Exception as e:
+            raise ValueError(f"Model prediction failed: {str(e)}")
+        
+        # Generate signals
         signals = []
-        for p in probs:
-            p = np.array(p)
+        valid_indices = []  # To track which indices have valid predictions
+        
+        # The model's predictions will be shorter than input due to windowing
+        # So we need to align them properly
+        window_size = getattr(self.model, 'window_size', Config.WINDOW_SIZE)
+        start_idx = window_size  # First prediction corresponds to this index
+        
+        # Initialize with HOLD signals for the warmup period
+        for i in range(start_idx):
+            signals.append(Config.HOLD_SIGNAL)
+            valid_indices.append(X.index[i])
+        
+        # Process model predictions
+        for i, p in enumerate(probs, start=start_idx):
+            if i >= len(X):
+                break  # Handle case where we have extra predictions
+                
             if p[Config.BUY_SIGNAL] > self.buy_threshold:
                 signals.append(Config.BUY_SIGNAL)
             elif p[Config.SELL_SIGNAL] > self.sell_threshold:
                 signals.append(Config.SELL_SIGNAL)
             else:
                 signals.append(Config.HOLD_SIGNAL)
+            valid_indices.append(X.index[i])
         
-        # Ensure the signals length matches the portfolio length
+        # Handle case where we didn't get enough predictions
         while len(signals) < len(X):
-            signals.append(Config.HOLD_SIGNAL)  # Padding with a default value if needed
+            signals.append(Config.HOLD_SIGNAL)
+            valid_indices.append(X.index[len(signals)-1])
         
-        return pd.Series(signals, index=X.index)  # Ensure index alignment
+        return pd.Series(signals, index=X.index)
