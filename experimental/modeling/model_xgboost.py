@@ -305,6 +305,12 @@ class XGBoostTradingModel:
         return np.array(equity), trades, trade_dates
 
     def evaluate_performance(self, df, equity, trades, trade_dates, set_name="Validation"):
+
+        # print(f"\n--- {set_name} Trade Dates ---")
+        # for date in trade_dates:
+        #     print(date)
+        # print(f"Total trades: {len(trade_dates)}\n")
+
         # Calculate trading days
         total_days = (df.index[-1] - df.index[0]).days
         unique_trade_days = len(set([d.date() for d in trade_dates]))  # Count unique trading days
