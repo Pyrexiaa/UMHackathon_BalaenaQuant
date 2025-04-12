@@ -1,4 +1,4 @@
-class Config:
+class BaseConfig:
     FEE_RATE = 0.0006
     BUY_SIGNAL = 0
     HOLD_SIGNAL = 1
@@ -6,6 +6,16 @@ class Config:
     BUY_THRESHOLD = 0.30
     SELL_THRESHOLD = 0.30
     WINDOW_SIZE = 4
+class TCNConfig:
     TCN_MODEL_PATH = "src/models/trained/tcn/model.pth"
     TCN_SCALER_PATH = "src/models/trained/tcn/scaler.pkl"
+
+class CNNConfig:
+    CNN_MODEL_PATH = "src/models/trained/cnn/model.pth"
+    CNN_SCALER_PATH = "src/models/trained/cnn/scaler.pkl"
+
+class GNNConfig:
+    HIDDEN_FEATURES = 4
+    GNN_MODEL_PATH = "src/models/trained/gnn/model.pth"
+    GNN_SCALER_PATH = "src/models/trained/gnn/scaler.pkl"
 

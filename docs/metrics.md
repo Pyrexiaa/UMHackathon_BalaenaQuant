@@ -61,7 +61,7 @@ Inherits: `BaseMetrics`
 trade_frequency(signals)
 ```
 - Calculates how frequently trades occurred based on signal series.
-- Uses Config.BUY_SIGNAL and Config.SELL_SIGNAL.
+- Uses BaseConfig.BUY_SIGNAL and BaseConfig.SELL_SIGNAL.
 
 <br/>
 

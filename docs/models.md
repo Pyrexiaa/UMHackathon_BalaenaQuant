@@ -10,11 +10,6 @@ models/
 │
 ├── base_model.py               # Abstract base class for all models
 ├── utils.py                    # Utility functions for saving/loading models and retrieving model instances
-├── model_weights/              # Pretrained model weights and associated scaler objects
-│   └── <model_name>/           # Folder for each specific model (e.g., tcn/)
-│       ├── model.pth           # Trained model weights (PyTorch format)
-│       └── scaler.pkl          # Corresponding data scaler for preprocessing
-│
 └── <model_name>/               # Implementation of a specific model architecture
     ├── model_architecture.py   # Custom neural network architecture definition
     └── <model_name>_model.py   # Model class extending BaseModel with training/prediction logic
@@ -73,20 +68,8 @@ tcn = TCNModel(ModelUtils)
 tcn.get_model("tcn")
 ```
 
-### 💻 Model Weights Folder `(model_weights)`
 
-#### `<model_name>`
-
-Contains the pretrained model weight and the scaler values in pickle file.
-
-#### Usage Example
-
-```model_weights/
-<model_name>/model.pth
-<model_name>/scaler.pkl
-```
-
-#### `model_architecture.py`
+### Model Architecture Class `model_architecture.py`
 
 Contains the customizable model architecture used in pretrained model. This allows the user to modify the architecture to cater to their own needs if it's needed.
 
@@ -106,7 +89,7 @@ class TCNClassifier(nn.Module):
         return self.linear(last_output)
 ```
 
-#### `model.py`
+### Model Main Class `model.py`
 
 This file allows to user to train and utilize the model by calling the "fit" or "predict" functions.
 

@@ -3,18 +3,18 @@ import torch
 import joblib
 import numpy as np
 from ..base_model import BaseModel
-from ...config import BaseConfig, TCNConfig
-from .model_architecture import TCNClassifier
+from ...config import BaseConfig, CNNConfig
+from .model_architecture import CryptoCNN
 
 
-class TCNModel(BaseModel):
+class CNNModel(BaseModel):
     """
-    A Temporal Convolution Network (TCN) model used to generate signals.
+    A Convolutional Neural Network (CNN) model used to generate signals.
     """
     
-    def __init__(self, model_path=TCNConfig.TCN_MODEL_PATH, scaler_path=TCNConfig.TCN_SCALER_PATH, device=None):
+    def __init__(self, model_path=CNNConfig.CNN_MODEL_PATH, scaler_path=CNNConfig.CNN_SCALER_PATH, device=None):
         """
-        Initialize the TCN model by loading the model and scaler.
+        Initialize the CNN model by loading the model and scaler.
 
         :param model_path: Path to the trained model
         :param scaler_path: Path to the scaler used for feature normalization
@@ -24,8 +24,7 @@ class TCNModel(BaseModel):
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         input_features = 12  # Specify your input features
-        num_channels = [64, 128, 64] # Example for TCN channels
-        self.model = TCNClassifier(input_features, 3, num_channels).to(self.device)
+        self.model = CryptoCNN(input_features, 3).to(self.device)
         
         # Load the model state_dict if it's a state_dict saved model
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))

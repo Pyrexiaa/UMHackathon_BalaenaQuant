@@ -1,6 +1,6 @@
 from .base_model import BaseModel
 from .utils import ModelUtils
-from .xgboost.xgboost_model import XGBoostModel
+from .xgboost.model import XGBoostModel
 from .tcn.model import TCNModel
 
 __all__ = [
