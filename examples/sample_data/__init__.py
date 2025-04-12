@@ -1,0 +1,7 @@
+import pandas as pd
+from os.path import join, dirname
+       
+def _read_file(filename):
+    return pd.read_csv(join(dirname(__file__), filename), index_col=0, parse_dates=True)
+
+BTC_DATA = _read_file('btc_data.csv')

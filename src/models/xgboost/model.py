@@ -52,6 +52,7 @@ class XGBoostModel(BaseModel):
         df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / \
                             df['volume'].rolling(30).std()
 
+<<<<<<< HEAD
         # Delta features
         delta_cols = [c for c in df.columns if c.startswith('start_time_')]
         for col in delta_cols:
@@ -160,3 +161,9 @@ class XGBoostModel(BaseModel):
             features = json.load(f)
             self.feature_groups = features['feature_groups']
             self.selected_features = features['selected_features']
+=======
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        return pd.Series(self.model.predict(X), index=X.index)
+    
+    
+>>>>>>> a6e5734d62b91fd10e8ad0f86d2d3fb5fe736c4f

@@ -114,3 +114,7 @@ class GNNModel(BaseModel):
             probs = torch.softmax(logits, dim=1).cpu().numpy()
 
         return probs
+    
+    
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.model.fit(X, y)

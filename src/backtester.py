@@ -270,7 +270,7 @@ class Backtester:
         ax3.legend()
         
         plt.tight_layout()
-        plt.savefig("output/") 
+        plt.savefig("output/result.png") 
         plt.show()
 
     def generate_report(self, phase: str = 'all'):
