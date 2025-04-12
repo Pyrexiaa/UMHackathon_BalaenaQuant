@@ -8,6 +8,7 @@ from .gnn.model import GNNModel
 __all__ = [
     "BaseModel",
     "ModelUtils",
+    "TCNModel"
 ]
 
 def get_model(name: str, **kwargs):

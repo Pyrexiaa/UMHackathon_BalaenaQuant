@@ -13,3 +13,5 @@ class XGBoostModel(BaseModel):
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         return pd.Series(self.model.predict(X), index=X.index)
+    
+    

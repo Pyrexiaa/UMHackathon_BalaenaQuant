@@ -54,28 +54,6 @@ Inherits: `BaseMetrics`
 | Avg Holding Period|	Mean duration of holding an asset|
 | Trade Frequency	|Number of trades per day|
 
-<br/>
-
-#### Signal-Based Metric
-```py
-trade_frequency(signals)
-```
-- Calculates how frequently trades occurred based on signal series.
-- Uses BaseConfig.BUY_SIGNAL and BaseConfig.SELL_SIGNAL.
-
-<br/>
-
-#### Fee Adjustment
-```py
-adjusted_returns()
-```
-Adjusts raw returns by applying the trading fee:
-
-```py
-adjusted = returns * (1 - trading_fee)
-```
-<br/>
-
 #### 📦 Composite Metric Output
 
 `all_metrics()`
