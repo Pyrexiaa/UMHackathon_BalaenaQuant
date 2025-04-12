@@ -14,8 +14,20 @@ if __name__ == "__main__":
     # Load data
     df = pd.read_csv(file_path, index_col=0, parse_dates=True)
 
+    # Preprocess data
+
     # Load model
     model = get_model("XGBOOST")
+
+    # Train Model
+    model.train(df)
+
+    # Make predictions
+    predictions = model.predict(df)
+    df['predictions'] = predictions
+
+    # Save model
+    model.save("models/xgboost_model")
 
     # Initialize strategy
     strategy = MLStrategy(model=model)
