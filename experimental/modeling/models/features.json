@@ -1,1 +1,1 @@
-["macd", "kmeans_cluster", "hmm_state", "volume_zscore", "taker_buy_ratio", "close"]
+["sma_50", "sma_200", "ema_5", "ema_8", "ema_13", "rsi_14", "rsi_obv_signal_14", "macd", "macd_signal_flag", "bb_signal_20", "volatility_24", "volatility_72", "estimated_leverage_ratio", "exchange_whale_ratio", "addresses_count_active", "miner_supply_ratio", "taker_buy_ratio", "long_liquidations_usd", "sentiment", "hmm_state", "kmeans_cluster", "close", "price_change_1", "volume"]

@@ -72,90 +72,90 @@ class XGBoostTradingModel:
             df['2024-01-01':'2025-03-31']
         )
 
-    # def prepare_features(self, train, val, test):
-    #     # Add dynamic features to all datasets
-    #     for df in [train, val, test]:
-    #         df['price_range'] = df['high'] - df['low']
-    #         df['price_momentum'] = df['close'] - df['open']
-
-    #     # Updated feature list with technical indicators
-    #     potential_features = [
-    #         # Price action
-    #         'close', 'price_range', 'price_momentum',
-            
-    #         # Technical indicators (optimized)
-    #         'sma_50', 'sma_200', 'ema_5', 'rsi_14', 'macd', 'macd_signal',  # Removed some of the redundant EMAs
-    #         'macd_crossover', 'volatility_20', 'price_change_1',
-            
-    #         # Existing features
-    #         'volume_zscore', 'net_liquidations_usd', 'taker_buy_ratio'
-    #     ]
-
-    #     # Final feature selection
-    #     self.features = [f for f in potential_features 
-    #                     if all(f in d.columns for d in [train, val, test])]
-        
-    #     # Scaling and return
-    #     X_train = self.scaler.fit_transform(train[self.features])
-    #     X_val = self.scaler.transform(val[self.features])
-    #     X_test = self.scaler.transform(test[self.features])
-        
-    #     return X_train, X_val, X_test, train['target'], val['target'], test['target']
-
     def prepare_features(self, train, val, test):
-        # Use all pre-engineered features from the new dataset
-        self.features = [
-            # Technical indicators
-            'rsi_obv_signal', 'bollinger_upper', 'bollinger_lower', 
-            'macd', 'kmeans_cluster', 'hmm_state',
-            
-            # Sentiment and volume features
-            'sentiment_score', 'volume_zscore', 'taker_buy_ratio',
-            
-            # Price action
-            'price_range', 'price_momentum', 'close',
-            
-            # Advanced features
-            'volatility_20', 'volume_obv', 'liquidation_skew'
-        ]
-
-        # Verify feature existence
-        available_features = []
-        for f in self.features:
-            if all(f in df.columns for df in [train, val, test]):
-                available_features.append(f)
-            else:
-                print(f"Warning: {f} missing in some datasets")
+        # Categorize features for systematic selection
+        feature_groups = {
+            'price_technical': [
+                'sma_50', 'sma_200', 'ema_5', 'ema_8', 'ema_13',
+                'rsi_14', 'rsi_obv_signal_14', 'macd', 'macd_signal_flag',
+                'bb_signal_20', 'volatility_24', 'volatility_72'
+            ],
+            'on_chain': [
+                'estimated_leverage_ratio', 'exchange_whale_ratio',
+                'addresses_count_active', 'miner_supply_ratio',
+                'taker_buy_ratio', 'long_liquidations_usd'
+            ],
+            'sentiment_cluster': [
+                'sentiment', 'hmm_state', 'kmeans_cluster'
+            ],
+            'price_action': [
+                'close', 'price_change_1', 'volume'
+            ]
+        }
         
-        self.features = available_features
-        print(f"Final features: {self.features}")
-
-        # Scale features
-        X_train = self.scaler.fit_transform(train[self.features])
-        X_val = self.scaler.transform(val[self.features])
-        X_test = self.scaler.transform(test[self.features])
+        # Select features present in all datasets
+        self.features = []
+        for group, features in feature_groups.items():
+            available = [f for f in features 
+                        if all(f in df.columns for df in [train, val, test])]
+            print(f"{group}: {len(available)}/{len(features)} features available")
+            self.features.extend(available)
         
-        return X_train, X_val, X_test, train['target'], val['target'], test['target']
+        print(f"\nTotal features selected: {len(self.features)}")
+        return self._scale_features(train, val, test)
+    
+    def _scale_features(self, train, val, test):
+        # Extract features from the datasets
+        X_train = train[self.features]
+        X_val = val[self.features]
+        X_test = test[self.features]
+
+        # Fit scaler only on training data
+        self.scaler.fit(X_train)
+
+        # Transform all datasets
+        X_train_scaled = self.scaler.transform(X_train)
+        X_val_scaled = self.scaler.transform(X_val)
+        X_test_scaled = self.scaler.transform(X_test)
+
+        # Get targets
+        y_train = train['target']
+        y_val = val['target']
+        y_test = test['target']
+
+        return X_train_scaled, X_val_scaled, X_test_scaled, y_train, y_val, y_test
+
 
     def train_model(self, X_train, y_train, X_val, y_val):
-        self.model =XGBClassifier(
-            objective='multi:softprob',
+        self.model = XGBClassifier(
+            objective='multi:softmax',
             num_class=3,
-            scale_pos_weight=self.class_weights,
-            min_child_weight=3,
-            gamma=0.2,
+            tree_method='hist',
+            max_depth=6,
+            learning_rate=0.01,
+            subsample=0.7,
+            colsample_bytree=0.7,
             reg_alpha=0.1,
             reg_lambda=0.1,
             n_estimators=50,
-            learning_rate=0.01,
-            max_depth=8,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            early_stopping_rounds=50,
-            eval_metric='mlogloss'
-        ) 
-
-        self.model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=20)
+            min_child_weight=3,
+            gamma=0.1,
+            eval_metric='mlogloss',
+            early_stopping_rounds=50
+        )
+        
+        # Class weights based on your data distribution
+        sample_weights = np.where(
+            y_train == 0, 1.5, 
+            np.where(y_train == 1, 1.0, 1.3)
+        )
+        
+        self.model.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            sample_weight=sample_weights,
+            verbose=20
+        )
 
     def predict_signals(self, X, buy_thresh=0.3, sell_thresh=0.3, hold_thresh=0.4):
         """
