@@ -1,0 +1,22 @@
+[
+    "future_return",
+    "price_change_1",
+    "ema_5_8_13_cross",
+    "taker_sell_ratio",
+    "taker_buy_ratio",
+    "taker_buy_sell_ratio",
+    "rsi_14",
+    "rsi_obv_signal_14",
+    "bb_signal_20",
+    "coinbase_premium_index_usdt_adjusted",
+    "macd_signal_flag",
+    "coinbase_premium_gap_usdt_adjusted",
+    "macd_trade_signal",
+    "macd",
+    "addresses_count_sender",
+    "addresses_count_active",
+    "blockreward",
+    "tokens_transferred_mean",
+    "long_liquidations",
+    "addresses_count_receiver"
+]
