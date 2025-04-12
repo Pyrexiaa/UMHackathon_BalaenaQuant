@@ -14,25 +14,43 @@ async def main():
     api_loader = APILoader(datasource_key="cryptoquant")
     metrics_call_using_api = ["reserve", "coinbase_premium_index", "taker-buy-sell-stats", "liquidations"]
 
+    # full param
+    await custom_loader.run(
+        metrics=["difficulty", "estimated_leverage_ratio", "addresses_count", "exchange_whale_ratio", "coinbase_premium_index", "taker-buy-sell-stats", "blockreward", "fees_transaction", "miner_supply_ratio", "addresses_count_inflow", "exchange_supply_ratio", "transactions_count_inflow", "tokens_transferred", "liquidations", "price-ohlcv", "open_interest"],
+        start_time=datetime(year=2020, month=1, day=1, tzinfo=timezone.utc),
+        end_time=datetime(year=2020, month=4, day=1, tzinfo=timezone.utc),
+        save_data=True,
+        merged=True
+    )
+    
+    # optional param
+    # await custom_loader.run(
+    #     metrics=["difficulty", "estimated_leverage_ratio", "addresses_count", "exchange_whale_ratio", "coinbase_premium_index", "taker-buy-sell-stats", "blockreward", "fees_transaction", "miner_supply_ratio", "addresses_count_inflow", "exchange_supply_ratio", "transactions_count_inflow", "tokens_transferred", "liquidations"],
+    #     save_data=False,
+    #     merged=True
+    # )
+    
+    # full param
+    # await api_loader.run(
+    #     metrics=metrics_call_using_api,
+    #     window="hour",
+    #     limit=1000,
+    #     save_data=True,
+    #     merged=True
+    # )
+    
+    # optional param
+    # await api_loader.run(
+    #     metrics=metrics_call_using_api,
+    #     save_data=True
+    # )
+    
+    
+        
 
-    for metric in metrics_call_using_api:
-        # Load data using API
-        
-        await api_loader.load_data(
-            metrics=metric,
-            window="hour",
-            limit=1000,
-            save_data=True
-        )
+   
         
         
-    for metric in data_source["cryptoquant"]["topics"]:
-        # Load data using topic
-        await custom_loader.load_data(
-            start_time=datetime(year=2020, month=1, day=1, tzinfo=timezone.utc),
-            end_time=datetime(year=2025, month=4, day=1, tzinfo=timezone.utc),
-            metrics=metric,
-            save_data=True
-        )
+   
 
 asyncio.run(main())

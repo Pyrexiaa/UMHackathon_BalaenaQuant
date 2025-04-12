@@ -1,5 +1,6 @@
-from base_metrics import BaseMetrics
+from .base_metrics import BaseMetrics
 import numpy as np
+from ..config import Config
 
 class Metrics(BaseMetrics):
     def total_return(self):
@@ -56,9 +57,10 @@ class Metrics(BaseMetrics):
     
     def trade_frequency(self, signals):
         """Returns trade frequency (trades per data row)."""
-        signal_count = np.sum(signals)  # Count number of signals (trades)
-        data_length = len(self.data)  # Data length is the number of rows in your data
-        return signal_count / data_length
+        trades = np.sum((signals == Config.BUY_SIGNAL) | (signals == Config.SELL_SIGNAL))  # Count number of signals (trades)
+        total = len(signals)
+        frequency = (trades / total) * 100 if total > 0 else 0
+        return frequency
 
     def adjusted_returns(self):
         """Adjust returns for trading fees (0.06% per trade)."""
