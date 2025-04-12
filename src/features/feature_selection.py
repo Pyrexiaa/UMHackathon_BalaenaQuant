@@ -102,3 +102,51 @@ def plot_feature_importance(df: pd.DataFrame,
 # Feature selection
 def select_features(df: pd.DataFrame, features: list) -> pd.DataFrame:
     return df[features]
+
+
+def map_sentiments_to_hourly(main_df, sentiment_file_path, datetime_col='datetime'):
+    """
+    Maps sentiment scores from sentiment_file_path to the main dataframe on an hourly basis.
+    
+    Args:
+        main_df (pd.DataFrame): Main dataframe with hourly data, containing a datetime column
+        sentiment_file_path (str): Path to the sentiment CSV file
+        datetime_col (str): Name of the datetime column in main_df
+        
+    Returns:
+        pd.DataFrame: Main dataframe with added sentiment column
+    """
+    # Read sentiment data
+    sentiment_df = pd.read_csv(sentiment_file_path)
+    
+    # Convert the Date column to datetime
+    sentiment_df['Date'] = pd.to_datetime(sentiment_df['Date'])
+    
+    # Round down to the nearest hour (floor)
+    sentiment_df['Hour'] = sentiment_df['Date'].dt.floor('H')
+    
+    # Group by hour and calculate mean sentiment (if multiple entries per hour)
+    hourly_sentiments = sentiment_df.groupby('Hour')['Accurate Sentiments'].mean().reset_index()
+    
+    # Create a dictionary mapping from hour to sentiment for fast lookup
+    sentiment_dict = dict(zip(hourly_sentiments['Hour'], hourly_sentiments['Accurate Sentiments']))
+    
+    # Create a copy of the main dataframe to avoid modifying the original
+    result_df = main_df.copy()
+    
+    # Determine if datetime is in the index or in a column
+    if datetime_col is None or datetime_col == main_df.index.name:
+        # Datetime is the index
+        result_df['sentiment'] = pd.Series(
+            index=result_df.index,
+            data=[sentiment_dict.get(idx, 0) for idx in result_df.index]
+        )
+    else:
+        # Datetime is a column
+        if not pd.api.types.is_datetime64_any_dtype(result_df[datetime_col]):
+            result_df[datetime_col] = pd.to_datetime(result_df[datetime_col])
+        
+        # Map sentiments to the main dataframe
+        result_df['sentiment'] = result_df[datetime_col].map(sentiment_dict).fillna(0)
+    
+    return result_df
