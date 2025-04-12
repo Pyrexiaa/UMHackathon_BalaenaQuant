@@ -1,30 +1,27 @@
 import pandas as pd
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from src.backtester import Backtester
 from src.strategy import MLStrategy
-from src.models import ModelUtils
+from src.models import get_model
 
-# Load data
-df = pd.read_csv("sample_data/btc_data.csv", index_col=0, parse_dates=True)
+if __name__ == "__main__":
+    
+    file_path = os.path.join(os.path.dirname(__file__), 'sample_data', 'btc_data.csv')
+    # Load data
+    df = pd.read_csv(file_path, index_col=0, parse_dates=True)
 
-# Load model
-model = ModelUtils.get_model("xgboost")
+    # Load model
+    model = get_model("TCN")
 
-# Initialize strategy
-strategy = MLStrategy(
-    model=model,
-    features=df.columns.tolist(),
-    target_column="target",
-    threshold=0.5,
-)
+    # Initialize strategy
+    strategy = MLStrategy(model=model)
 
-bt = Backtester(data=df, strategy=strategy)
-bt.run()
+    # Run backtest
+    bt = Backtester(data=df, strategy=strategy)
+    bt.run(forward_test=True, forward_years=1)
 
-# Run backtest
-bt = Backtester(data=df, strategy=strategy)
-bt.run()
-
-# Show metrics
-bt.get_performance_metrics()
-
-# work in progress
+    bt.generate_report()
+    
+    bt.plot_results()
