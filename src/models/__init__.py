@@ -2,7 +2,7 @@ from .base_model import BaseModel
 from .utils import ModelUtils
 from .xgboost.model import XGBoostModel
 from .tcn.model import TCNModel
-from .cnn.model import CryptoCNN
+from .cnn.model import CNNModel
 from .gnn.model import GNNModel
 from .tabnet.model import TabNetModel
 
@@ -19,7 +19,7 @@ def get_model(name: str, **kwargs):
     elif name == "xgboost":
         return XGBoostModel(**kwargs)
     elif name == "cnn":
-        return CryptoCNN(**kwargs)
+        return CNNModel(**kwargs)
     elif name == "gnn":
         return GNNModel(**kwargs)
     elif name == "tabnet":
