@@ -1,7 +1,7 @@
 # QuantPilot
 
 ## Project Overview
-QuantPilot is a high-performance, modular framework tailored for developing, backtesting, and evaluating trading strategies. It is built to support systematic strategy research using both traditional and machine learning-based approaches. With a flexible architecture and seamless integration across modules, BalaenaQuant empowers researchers and traders to rapidly iterate, test, and deploy alpha-generating ideas with real-world constraints and metrics.
+QuantPilot is a high-performance, modular framework tailored for developing, backtesting, and evaluating trading strategies. It is built to support systematic strategy research using both traditional and machine learning-based approaches. With a flexible architecture and seamless integration across modules, QuantPilot empowers researchers and traders to rapidly iterate, test, and deploy alpha-generating ideas with real-world constraints and metrics.
 
 ## Directory Structure
 ### data
@@ -86,8 +86,6 @@ root/
     │
     output/
 ```
-
-
 
 ## Getting Started
 ### Prerequisites
