@@ -6,17 +6,16 @@ HOLD_SIGNAL = 1
 SEQUENCE_LENGTH = 4
 PREDICTION_LENGTH = 4
 BATCH_SIZE = 64
-LR = 0.0001
+LR = 1e-3
 EPOCHS = 50
-WEIGHT_DECAY = 1e-5
-MODEL_DIMENSION = 64
+WEIGHT_DECAY = 1e-3
 NUM_LAYERS = 2
 DROPOUT_RATE = 0.5
-HIDDEN_FEATURES = 6
+HIDDEN_FEATURES = 32
 
 # --- Paths ---
-SCALING_PATH = "output/timesnet/scaling_values.pkl"
-MODEL_OUTPUT_PATH = "output/timesnet/model_output.pth"
-MODEL_OUTPUT_FILE_PATH = "output/timesnet/model_output.csv"
-TRADING_OUTPUT_FILE_PATH = "output/timesnet/trading_output.csv"
-EVALUATE_PATH = "output/timesnet/evaluate_graph.png"
+SCALING_PATH = "output/gnn/scaling_values.pkl"
+MODEL_OUTPUT_PATH = "output/gnn/model_output.pth"
+MODEL_OUTPUT_FILE_PATH = "output/gnn/model_output.csv"
+TRADING_OUTPUT_FILE_PATH = "output/gnn/trading_output.csv"
+EVALUATE_PATH = "output/gnn/evaluate_graph.png"
