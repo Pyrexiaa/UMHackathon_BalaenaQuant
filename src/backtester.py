@@ -1,11 +1,9 @@
-from .portfolio import Portfolio
-from .metrics import Metrics
+import pandas as pd
+import matplotlib.pyplot as plt
+from typing import Dict, Optional, Tuple
 from tabulate import tabulate
 from datetime import timedelta
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from typing import Dict, List, Optional, Tuple
+from .metrics import Metrics
 
 
 class Backtester:
@@ -183,16 +181,13 @@ class Backtester:
                 portfolio.at[portfolio.index[i], 'cash'] = prev_cash
 
             # Update holdings and total value
-            current_holdings = portfolio.at[portfolio.index[i],
-                                            'position'] * price
+            current_holdings = portfolio.at[portfolio.index[i],'position'] * price
             portfolio.at[portfolio.index[i], 'holdings'] = current_holdings
-            portfolio.at[portfolio.index[i], 'total'] = (
-                portfolio.at[portfolio.index[i], 'cash'] + current_holdings)
+            portfolio.at[portfolio.index[i], 'total'] = (portfolio.at[portfolio.index[i], 'cash'] + current_holdings)
 
         # Calculate returns and drawdown
         portfolio['returns'] = portfolio['total'].pct_change().fillna(0)
-        portfolio['cumulative_returns'] = (
-            1 + portfolio['returns']).cumprod() - 1
+        portfolio['cumulative_returns'] = (1 + portfolio['returns']).cumprod() - 1
         portfolio['drawdown'] = self._calculate_drawdown(portfolio['total'])
 
         trades_df = pd.DataFrame(trades)
@@ -301,10 +296,10 @@ class Backtester:
             self._print_phase_report('forward')
             print("=" * 60)
 
-            # print("\n" + "=" * 60)
-            # print("COMBINED PERFORMANCE".center(60))
-            # print("=" * 60)
-            # self._print_phase_report('full')
+            print("\n" + "=" * 60)
+            print("COMBINED PERFORMANCE".center(60))
+            print("=" * 60)
+            self._print_phase_report('full')
         else:
             # Show single phase
             print("\n" + "=" * 60)

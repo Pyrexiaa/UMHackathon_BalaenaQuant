@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from typing import Dict, Optional, Union
+from typing import Optional
 
 class BaseMetrics(ABC):
     """
