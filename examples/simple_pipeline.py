@@ -5,7 +5,7 @@ from src.models.utils import ModelUtils
 
 btc_data = pd.read_csv("sample_data/btc_data.csv", index_col=0, parse_dates=True)
 
-model = ModelUtils.load_model("experimental/modeling/models/xgboost_model.pkl")
+model = ModelUtils.get_model("xgboost")
 
 strategy = MLStrategy(
     model=model,
@@ -18,8 +18,8 @@ backtester = Backtester(
     data=btc_data,
     strategy=strategy,
 )
-
+o
 backtester.run()
+backtester.get_performance_metrics()
 
-metrics = backtester.get_performance_metrics()
-print(metrics)
+# work in progress
