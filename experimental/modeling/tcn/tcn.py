@@ -27,39 +27,13 @@ from .datasets import TimeSeriesDataset
 from torch.utils.data import DataLoader
 
 def prepare_features(df):
-    if 'close_7d_ma' not in df.columns:
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-    if 'close_30d_std' not in df.columns:
-        df['close_30d_std'] = df['close'].rolling(30).std()
-    if 'volume_zscore' not in df.columns:
-        df['volume_zscore'] = ((df['volume'] - df['volume'].rolling(30).mean()) / 
-                            df['volume'].rolling(30).std())
-
-    if ('exchange_whale_ratio' in df.columns and 
-        'start_time_exchange_whale_ratio' in df.columns):
-        df['whale_ratio_diff'] = (df['exchange_whale_ratio'] - 
-                                    df['start_time_exchange_whale_ratio'])
-    
-    # Calculate delta_estimated_leverage_ratio if components exist
-    if ('estimated_leverage_ratio' in df.columns and 
-        'start_time_estimated_leverage_ratio' in df.columns):
-        df['delta_estimated_leverage_ratio'] = (df['estimated_leverage_ratio'] - 
-                                                df['start_time_estimated_leverage_ratio'])
-
     potential_features = [
-        'delta_estimated_leverage_ratio',
-        'whale_ratio_diff',
-        'close_7d_ma',
-        'close_30d_std',
-        'volume_zscore',
-        'taker_buy_ratio',
-        'open_interest',
-        'positions',
-        'close',
-        "open",
-        "high",
-        "low",
-        "volume"
+        'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
+        'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
+        'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
+        'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
+        'addresses_count_sender', 'addresses_count_active', 'blockreward', 
+        'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', "target"
     ]
 
     df = df[potential_features].copy()
@@ -107,8 +81,8 @@ def load_csv(df_path):
 # --- Normalize ---
 def normalize_data(df, previous_scaling=None):
     # Separate features and label
-    features = df.drop(columns=["positions"])
-    positions = df["positions"].reset_index(drop=True)
+    features = df.drop(columns=["target"])
+    target = df["target"].reset_index(drop=True)
 
     if previous_scaling:
         # Load previously saved scaler
@@ -121,7 +95,7 @@ def normalize_data(df, previous_scaling=None):
 
     # Combine scaled features and label
     scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
-    scaled_df["positions"] = positions
+    scaled_df["target"] = target
 
     return scaled_df
 
@@ -130,8 +104,8 @@ def preprocess_data(df):
     X = []
     y = []
     for i in range(WINDOW_SIZE, len(df)):
-        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["positions"]).values)
-        y.append(df["positions"].iloc[i])
+        X.append(df.iloc[i - WINDOW_SIZE:i].drop(columns=["target"]).values)
+        y.append(df["target"].iloc[i])
     
     return np.array(X), np.array(y)
 
@@ -421,13 +395,13 @@ def plot_results(df, equity, signals, set_name="validation"):
     plt.close()
 
 if __name__ == "__main__":
-    dataset_path = "experimental/datasets/btc_data_with_target_modified.csv"
+    dataset_path = "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
     # --- Load CSV ---
-    df_train, df_val, df_test = load_csv(dataset_path)
+    raw_df_train, raw_df_val, raw_df_test = load_csv(dataset_path)
     # --- Prepare features ---
-    df_train = prepare_features(df_train)
-    df_val = prepare_features(df_val)
-    df_test = prepare_features(df_test)
+    df_train = prepare_features(raw_df_train)
+    df_val = prepare_features(raw_df_val)
+    df_test = prepare_features(raw_df_test)
     # # --- Normalize ---
     scaled_train = normalize_data(df_train, previous_scaling=False)
     scaled_val = normalize_data(df_val, previous_scaling=SCALING_PATH)
@@ -463,7 +437,7 @@ if __name__ == "__main__":
     signals = predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30)
 
     # Backtest on raw (non-scaled) test set
-    df_test_raw = df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
+    df_test_raw = raw_df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
     equity, trades = backtest(df_test_raw, signals)
 
     # Evaluate performance
