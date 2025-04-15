@@ -121,7 +121,6 @@ Trade Frequency (trades/day)  7.23
 ![alt text](architecture-diagram.jpeg)
 
 ## Documentation
-Presentation slide: [slide link](https://www.canva.com/design/DAGkV7mcnvA/eN3IcmLJmv-_Hmy_4f3bnA/view?utm_content=DAGkV7mcnvA&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h61e831623c)
 </br>
 Detailed documentation is available in [docs](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/tree/main/docs)
 
