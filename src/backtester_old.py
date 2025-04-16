@@ -4,12 +4,11 @@ from typing import Dict, Optional, Tuple
 from tabulate import tabulate
 from datetime import timedelta
 from .metrics import Metrics
-import os
 
 
 class Backtester:
     def __init__(self, data: pd.DataFrame, strategy, initial_capital: float = 100000,
-                 risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1):
+                 risk_free_rate: float = 0.0, trading_fee: float = 0.0006):
         """
         Initialize the backtester with strategy, data, and configuration.
 
@@ -26,12 +25,7 @@ class Backtester:
         self.trading_fee = trading_fee
         self.results = None
         self.trades = None
-        self.qty_per_trade = qty_per_trade
         self.metrics = None
-        
-        # if output directory does not exist, create it
-        if not os.path.exists("output"):
-            os.makedirs("output")
 
     def run(self,
             forward_test: bool = False,
@@ -70,20 +64,15 @@ class Backtester:
 
             # Run backtest phase
             print("Running backtest phase...")
-            backtest_results, backtest_trades, backtest_records = self._run_phase(backtest_data)
+            backtest_results, backtest_trades = self._run_phase(backtest_data)
 
             # Run forward test phase
             print("\nRunning forward test phase...")
-            forward_results, forward_trades, forward_records = self._run_phase(forward_data)
+            forward_results, forward_trades = self._run_phase(forward_data)
 
             # Combine results
             self.results = pd.concat([backtest_results, forward_results])
             self.trades = pd.concat([backtest_trades, forward_trades])
-            
-            # Save results to CSV
-            self.results.to_csv("output/portfolio.csv")
-            self.trades.to_csv("output/transaction.csv")        
-            pd.concat([backtest_records, forward_records]).to_csv("output/records.csv")
 
             self.periods = {
                 'backtest': {
@@ -134,134 +123,91 @@ class Backtester:
         """
         portfolio = pd.DataFrame(index=data.index)
         portfolio['price'] = data['close']
-        portfolio['price_change'] = data['close'].pct_change().fillna(0)
-        portfolio['signal'] = self.strategy.generate_signals(data)
-        portfolio['signal'] = portfolio['signal'].replace({0: -1, 1: 0, 2: 1})
-        portfolio['position'] = portfolio['signal'].replace(to_replace=0, method='ffill').fillna(0)  # forward fill previous position
-        # portfolio['trades'] = abs(portfolio['position'].diff().fillna(0))
-        portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position'])))
-        
-        # Capital tracking variables
-        capital = self.initial_capital
-        # position_size = 0.5
-        cash = capital
-        shares_held = 0
+        portfolio['cash'] = float(self.initial_capital)
+        portfolio['position'] = 0.0
+        portfolio['holdings'] = 0.0
+        portfolio['total'] = float(self.initial_capital)
+        portfolio['signal'] = self.strategy.generate_signals(data).shift(1)   # Trade on next bar
 
-        equity_history = []
-        cash_history = []
-        shares_history = []
+        trades = []
 
-        # Execute trades and track capital
-        for i in range(len(portfolio)):
-            price = portfolio.iloc[i]['price']
-            position = portfolio.iloc[i]['position']
-            trade = portfolio.iloc[i]['trades']
+        for i in range(1, len(portfolio)):
+            prev_position = portfolio['position'].iloc[i-1]
+            prev_cash = portfolio['cash'].iloc[i-1]
+            signal = portfolio['signal'].iloc[i]
+            price = portfolio['price'].iloc[i]
 
-            if trade != 0:
-                if position == 1:
-                    # Buy
-                    buyable = trade * self.qty_per_trade
-                    cash -= buyable * price * (1 + self.trading_fee)
-                    shares_held += buyable
-                elif position == -1:
-                    # Sell
-                    sellable = trade * self.qty_per_trade
-                    cash += sellable * price * (1 - self.trading_fee)
-                    shares_held -= sellable
-            
-            current_equity = cash + shares_held * price
-            equity_history.append(current_equity)
-            cash_history.append(cash)
-            shares_history.append(shares_held)
+            # Determine target position based on signal
+            if signal == 2:  # Buy
+                target_position = (prev_cash * 0.98) / price
+            elif signal == 0:  # Sell
+                target_position = 0.0
+            else:  # Hold
+                target_position = prev_position
 
-        portfolio['cash'] = cash_history
-        portfolio['equity'] = equity_history
-        portfolio['shares'] = shares_history
-        # portfolio['drawdown'] = portfolio['equity'] - portfolio['equity'].cummax()
-        portfolio['drawdown'] = (portfolio['equity'] - portfolio['equity'].cummax()) / portfolio['equity'].cummax()
-        portfolio['pnl'] = portfolio['equity'].diff().fillna(0)
+            position_change = target_position - prev_position
 
-        # Create transaction record
-        records = portfolio.copy()
-        # drop all trade == 0
-        records = records[records['trades'] != 0]
-        records['trade_signal'] = records['position'].replace(
-            {1: 'Buy', -1: 'Sell', 0: 'Hold'})
-        
-        transaction = pd.DataFrame(columns=[
-            'mode', 'entry_position', 'trade_shares', 'entry_time', 'exit_time',
-            'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity'
-        ])
+            if position_change != 0:
+                trade_value = position_change * price
+                trade_cost = abs(trade_value) * self.trading_fee
+                cash_after_trade = prev_cash - (trade_value) - trade_cost
 
-        open_trades = []
+                # Update portfolio
+                portfolio.at[portfolio.index[i], 'position'] = target_position
+                portfolio.at[portfolio.index[i], 'cash'] = cash_after_trade
 
-        for i in range(len(records)):
-            row = records.iloc[i]
-            time = records.index[i]
-            price = row['price']
-            trades = int(row['trades'])               # total trades in row
-            net_shares = row['shares']                # resulting position
-            position = int(row['position'])          # 1 for long, -1 for short
-            equity = row['equity']                    # current equity
-
-            # Determine direction of each individual trade
-            if trades == 0:
-                continue
-
-            for _ in range(trades):
-                # If no open trade or same direction, this is an entry
-                if not open_trades or open_trades[-1]['entry_position'] == position:
-                    open_trades.append({
-                        'entry_position': position,
-                        'entry_time': time,
-                        'entry_price': price
-                    })
+                # Calculate actual PnL (mark-to-market)
+                if prev_position != 0:  # Only if we had a position
+                    pnl = (
+                        price - portfolio.at[portfolio.index[i-1], 'price']) * prev_position
                 else:
-                    # This is an exit of opposite position
-                    entry = open_trades.pop()
-                    matched_position = entry['entry_position']
-                    pnl = (price - entry['entry_price']) * matched_position 
+                    pnl = 0
 
-                    transaction = pd.concat([transaction if not transaction.empty else pd.DataFrame(),
-                        pd.DataFrame([{
-                        'entry_position': matched_position,
-                        'trade_shares': 1 * self.qty_per_trade,
-                        'entry_time': entry['entry_time'],
-                        'exit_time': time,
-                        'entry_price': entry['entry_price'],
-                        'exit_price': price,
-                        'pnl_per_share': pnl,
-                        'pnl': pnl * self.qty_per_trade,
-                        'remaining_shares': net_shares,
-                        'equity': equity
-                    }])], ignore_index=True)
+                trades.append({
+                    'entry_time': portfolio.index[i],
+                    'exit_time': portfolio.index[i],
+                    'entry_price': price,
+                    'exit_price': price,
+                    'shares': target_position,
+                    'pnl': pnl - trade_cost,
+                    'signal': signal,
+                    'fee': trade_cost,
+                    'trade_value': trade_value
+                })
 
-        transaction['mode'] = transaction['entry_position'].apply(
-            lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy')
-        # drop the entry_position column
-        transaction.drop(columns=['entry_position'], inplace=True)
-        transaction = transaction[['mode', 'trade_shares', 'entry_time', 'exit_time',
-                                   'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity']]
-        
-        records['trade_shares'] = records['trades'].apply(
-            lambda x: x * self.qty_per_trade if x != 0 else 0)
-        records = records[['trade_signal', 'trades', 'trade_shares', 'price', 'shares', 'cash', 'equity']]
-     
-        return portfolio, transaction, records
+            else:
+                # No trade, just carry forward
+                portfolio.at[portfolio.index[i], 'position'] = prev_position
+                portfolio.at[portfolio.index[i], 'cash'] = prev_cash
 
+            # Update holdings and total value
+            current_holdings = portfolio.at[portfolio.index[i],'position'] * price
+            portfolio.at[portfolio.index[i], 'holdings'] = current_holdings
+            portfolio.at[portfolio.index[i], 'total'] = (portfolio.at[portfolio.index[i], 'cash'] + current_holdings)
 
-    # def _calculate_drawdown(self, equity_curve: pd.Series) -> pd.Series:
-    #     """Calculate drawdown from equity curve."""
-    #     running_max = equity_curve.cummax()
-    #     drawdown = (equity_curve - running_max) / running_max
-    #     return drawdown
+        # Calculate returns and drawdown
+        portfolio['returns'] = portfolio['total'].pct_change().fillna(0)
+        portfolio['cumulative_returns'] = (1 + portfolio['returns']).cumprod() - 1
+        portfolio['drawdown'] = self._calculate_drawdown(portfolio['total'])
+
+        trades_df = pd.DataFrame(trades)
+        if not trades_df.empty:
+            trades_df['entry_time'] = pd.to_datetime(trades_df['entry_time'])
+            trades_df['exit_time'] = pd.to_datetime(trades_df['exit_time'])
+
+        return portfolio, trades_df
+
+    def _calculate_drawdown(self, equity_curve: pd.Series) -> pd.Series:
+        """Calculate drawdown from equity curve."""
+        running_max = equity_curve.cummax()
+        drawdown = (equity_curve - running_max) / running_max
+        return drawdown
 
     def _calculate_metrics(self, results: pd.DataFrame, trades: pd.DataFrame) -> Dict:
         """Calculate metrics for a specific period."""
         return Metrics(
-            equity=results['equity'],
-            drawdown=results['drawdown'],
-            returns=results['pnl'],
+            equity=results['total'],
+            returns=results['returns'],
             trades=trades,
             risk_free_rate=self.risk_free_rate,
             trading_fee=self.trading_fee,
@@ -300,7 +246,7 @@ class Backtester:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
 
         # Equity curve
-        ax1.plot(self.results['equity'], label='Portfolio Value', color='blue')
+        ax1.plot(self.results['total'], label='Portfolio Value', color='blue')
         ax1.set_ylabel('Portfolio Value ($)')
         ax1.set_title('Equity Curve')
         ax1.grid(True, linestyle='--', alpha=0.7)
@@ -314,10 +260,8 @@ class Backtester:
 
         # Signals and positions
         ax3.plot(self.results['price'], label='Price', color='black', alpha=0.5)
-        # buy_signals = self.results[self.results['signal'] == 2]
-        # sell_signals = self.results[self.results['signal'] == 0]
-        buy_signals = self.results[(self.results['position'] == 1) & (self.results['trades'] > 0)]
-        sell_signals = self.results[(self.results['position'] == -1) & (self.results['trades'] > 0)]
+        buy_signals = self.results[self.results['signal'] == 2]
+        sell_signals = self.results[self.results['signal'] == 0]
         ax3.scatter(buy_signals.index, buy_signals['price'],label='Buy', marker='^', color='green', alpha=1)
         ax3.scatter(sell_signals.index, sell_signals['price'],label='Sell', marker='v', color='red', alpha=1)
         ax3.set_ylabel('Price ($)')
@@ -386,8 +330,7 @@ class Backtester:
             if isinstance(value, float):
                 if name.endswith(('Ratio', 'Rate', 'Factor')):
                     return f"{value:.2f}"
-                # elif 'Drawdown' in name or abs(value) < 1:
-                elif 'Drawdown' in name or 'Return' in name:
+                elif 'Drawdown' in name or abs(value) < 1:
                     return f"{value:.2%}"
                 else:
                     return f"{value:,.2f}"
@@ -399,7 +342,7 @@ class Backtester:
             ["End Date", end_date.date()],
             ["Duration (days)", len(results)],
             ["Initial Capital", f"${self.initial_capital:,.2f}"],
-            ["Final Equity", f"${results['equity'].iloc[-1]:,.2f}"]
+            ["Final Equity", f"${results['total'].iloc[-1]:,.2f}"]
         ]
 
         # Performance metrics

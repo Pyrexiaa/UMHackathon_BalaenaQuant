@@ -9,6 +9,7 @@ class BaseMetrics(ABC):
     """
     def __init__(self,
                  equity: pd.Series,
+                 drawdown: pd.Series,
                  returns: pd.Series,
                  trades: Optional[pd.DataFrame] = None,
                  risk_free_rate: float = 0.0,
@@ -18,6 +19,7 @@ class BaseMetrics(ABC):
         Initialize base metrics calculator.
         
         :param equity: Series of portfolio values over time
+        :param drawdown: Series of drawdown values over time
         :param returns: Series of daily returns
         :param trades: DataFrame containing trade records
         :param risk_free_rate: Annual risk-free rate for risk-adjusted metrics
@@ -25,6 +27,7 @@ class BaseMetrics(ABC):
         :param signals: Series of trading signals (for frequency calculations)
         """
         self.equity = equity
+        self.drawdown = drawdown
         self.returns = returns
         self.trades = trades
         self.risk_free_rate = risk_free_rate
