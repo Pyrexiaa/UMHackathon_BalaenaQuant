@@ -1,47 +1,47 @@
+from src.features import FeaturePipeline
+from src.features.all_features import *
 import pandas as pd
-import numpy as np
 
-import sys
-import os
+df = pd.read_csv("your_price_data.csv")
 
-# Add the path to your 'src' folder dynamically
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
+pipeline = FeaturePipeline([
+    SMA(windows=[50, 200]),
+    EMA(),
+    RSI(windows=[14]),
+    OBV(),
+    RSIObvSignal(rsi_window=14),
+    MACD(),
+    PriceChange(),
+    Volatility(),
+    BollingerBands(),
+    HMM(),
+    RollingKMeans(),
+    NLPSentiment()
+])
 
-from src.features.technical_indicators import MovingAverageFeature, VolatilityFeature
-from src.features.ml_features import HMMFeature
-from hmmlearn.hmm import GaussianHMM
+new_df = pipeline.add_features(df)
 
-# Create a simple DataFrame with 'close' prices
-np.random.seed(42)
-dates = pd.date_range("2025-01-01", periods=100, freq="D")
-df = pd.DataFrame({
-    "close": np.random.normal(100, 5, size=100)
-}, index=dates)
 
-# Display first few rows of df
-print(df.head())
 
-# Define technical indicators (Moving Average, Volatility)
-ma_feature = MovingAverageFeature(window="7d")  # 7-day moving average
-volatility_feature = VolatilityFeature(window="7d")  # 7-day volatility
+# Add a new technical indicators
+from ...src.features.base_feature import BaseFeature
+import pandas as pd
 
-# Define HMM feature with a simple model (fit to close prices)
-hmm_model = GaussianHMM(n_components=3, covariance_type="diag")
-hmm_model.fit(df[['close']])  # Fit the model on close prices
-hmm_feature = HMMFeature(model=hmm_model)
+class ZScore(BaseFeature):
+    def __init__(self, column='close', window=20):
+        self.column = column
+        self.window = window
 
-# Apply features to the DataFrame
-print("Before MA feature:", df.shape)
-df = ma_feature.transform(df)
-print("After MA feature:", df.shape)
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        mean = df[self.column].rolling(self.window).mean()
+        std = df[self.column].rolling(self.window).std()
+        df[f'zscore_{self.window}'] = (df[self.column] - mean) / std
+        return df
+    
+pipeline = FeaturePipeline([
+    ZScore(),
+    RSI(),
+    SMA()
+])
 
-print("Before Volatility feature:", df.shape)
-df = volatility_feature.transform(df)
-print("After Volatility feature:", df.shape)
-
-print("Before HMM feature:", df.shape)
-df = hmm_feature.transform(df)
-print("After HMM feature:", df.shape)
-
-# Display first few rows of the updated df with all features
-print(df.head())
+df = pipeline.transform(df)

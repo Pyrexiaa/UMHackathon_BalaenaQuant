@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 import os
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-from data.api.api_client import APIClient
-from data.constant.data_source import data_source
+from src.data.api.api_client import APIClient
+from src.data.constant.data_source import data_source
 
 class BaseLoader(ABC):
     """
     BaseLoader is an abstract class that serves as a template for loading data from a specific data source. 
     """
-    
-    def __init__(self, datasource_key: str):
+      
+    def __init__(self, datasource_key: Optional[str] = "cryptoquant"):
         """
         Initialize the BaseLoader class.
 
@@ -37,7 +37,7 @@ class BaseLoader(ABC):
         Cleans the loaded data by removing duplicates and filling missing values.
         """
         self.data = self.data.drop_duplicates()  # Drop duplicate rows
-        self.data = self.data.fillna(method='ffill')  # Forward fill missing values
+        self.data = self.data.ffill()  # Forward fill missing values
 
     def get_data(self) -> pd.DataFrame:
         """
@@ -66,7 +66,6 @@ class BaseLoader(ABC):
         output_path = f"output/{datasource}_{metrics}_processed.csv"  # File path for the output CSV
         os.makedirs("output", exist_ok=True)  # Create output directory if it doesn't exist
         self.get_data().to_csv(output_path)  # Save the cleaned data to CSV
-        print(f"Processed data saved to {output_path}")
     
     def merge_csv(self, datasource: str, metrics: list[str]) -> None:
         """
@@ -76,27 +75,20 @@ class BaseLoader(ABC):
         :param metrics: List of metric names to be merged.
         :return: A DataFrame containing the merged data.
         """
-        # Generate the file paths for the metrics
-        csv_paths = [f"output/{datasource}_{metric}_processed.csv" for metric in metrics]
-        print(f"CSV paths: {csv_paths}")
-        
         merged_df = None  # Initialize merged DataFrame
 
-        for df_name in self.dataframes.keys():
+        for df_name, df in self.dataframes.items():
             try:
-                df = self.dataframes[df_name]  # Get DataFrame by metric name
                 df.set_index("datetime", inplace=True)  # Set 'datetime' as the index for merging
-
-                # Merge the DataFrames
+                # Merge DataFrames
                 if merged_df is None:
                     merged_df = df
                 else:
-                    suffix = os.path.basename(df_name)  # Generate a suffix based on the DataFrame name
-                    merged_df = merged_df.join(df, how="inner", rsuffix=f"_{suffix}")  # Perform an inner join
-
+                    suffix = os.path.basename(df_name)  # Generate suffix based on DataFrame name
+                    merged_df = merged_df.join(df, how="inner", rsuffix=f"_{suffix}")
             except Exception as e:
-                print(f"Failed to process {df_name}: {e}")  # Error handling for failed processing
-
+                print(f"Failed to process {df_name}: {e}")
+                
         # Check if the merge was successful
         if merged_df is None:
             raise ValueError("No DataFrames were successfully joined.")  # Raise an error if no DataFrames were merged
@@ -106,7 +98,7 @@ class BaseLoader(ABC):
         # Generate the output path for the merged file
         merged_output_path = f"output/{datasource}_{datetime.now()}_merged.csv"
         merged_df.to_csv(merged_output_path, index=False)  # Save the merged DataFrame to CSV
-        print(f"Joined CSV saved to {merged_output_path}")
+        print(f"CSV saved to {merged_output_path}")
         
         # Handle infinite values and replace with NaN
         merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -116,7 +108,7 @@ class BaseLoader(ABC):
         merged_df["datetime"] = merged_df["datetime"].astype(str)
 
         # Return a sample of the merged data as a dictionary
-        return merged_df.head().to_dict(orient="records")
+        return merged_df
     
     @abstractmethod
     async def run(self) -> pd.DataFrame:
