@@ -1,6 +1,7 @@
 from .base_metrics import BaseMetrics
 import numpy as np
 from ..config import BaseConfig
+import pandas as pd
 
 class Metrics(BaseMetrics):
     def total_return(self):
@@ -30,10 +31,12 @@ class Metrics(BaseMetrics):
 
     def max_drawdown(self):
         """Maximum peak-to-trough portfolio loss."""
-        cumulative = self.equity
-        peak = cumulative.cummax()
-        drawdown = (cumulative - peak) / peak
-        return drawdown.min()
+        return self.drawdown.min()
+        # cumulative = self.equity
+        # peak = cumulative.cummax()
+        # drawdown = (cumulative - peak) / peak
+        # return drawdown.min()
+        
 
     def calmar_ratio(self):
         """Annual return divided by absolute maximum drawdown."""
@@ -77,6 +80,9 @@ class Metrics(BaseMetrics):
 
         holding_period = None
         if 'exit_time' in trades.columns and 'entry_time' in trades.columns:
+            trades['entry_time'] = pd.to_datetime(trades['entry_time'], errors='coerce')
+            trades['exit_time'] = pd.to_datetime(trades['exit_time'], errors='coerce')
+
             holding_period = trades['exit_time'] - trades['entry_time']
             holding_period = holding_period.mean()
 

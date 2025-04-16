@@ -19,15 +19,15 @@ class MACrossoverStrategy(BaseStrategy):
         """
         Generate trading signals based on moving average crossover.
 
-        :param X: DataFrame containing at least a 'Close' column
+        :param X: DataFrame containing at least a 'close' column
         :return: pd.Series of signals (2 = Buy, 0 = Sell, 1 = Hold)
         """
         # Compute moving averages
-        short_ma = X['Close'].rolling(window=self.short_window, min_periods=1).mean()
-        long_ma = X['Close'].rolling(window=self.long_window, min_periods=1).mean()
+        short_ma = X['close'].rolling(window=self.short_window, min_periods=1).mean()
+        long_ma = X['close'].rolling(window=self.long_window, min_periods=1).mean()
 
         # Initialize signal series
-        signal = pd.Series(0, index=X.index)
+        signal = pd.Series(1, index=X.index)
 
         # Buy signal: short crosses above long
         crossover_buy = (short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))
