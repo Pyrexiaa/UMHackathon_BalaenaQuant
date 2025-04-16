@@ -23,18 +23,18 @@ class FeaturePipeline:
         Returns a pipeline with the standard set of features commonly used for cryptocurrency data analysis.
         """
         return FeaturePipeline([
-            SMA(),                            # Simple Moving Averages
-            EMA(),                            # Exponential Moving Average
-            RSI(),                            # Relative Strength Index
-            OBV(),                            # On-Balance Volume
-            RSIObvSignal(),                   # RSI + OBV Signal
-            MACD(),                           # Moving Average Convergence Divergence
-            PriceChange(),                    # Price Change percentage
-            Volatility(),                     # Volatility Indicator
-            BollingerBands(),                 # Bollinger Bands
-            HMM(),                            # Hidden Markov Model for market state prediction
-            RollingKMeans(),                  # Rolling KMeans clustering for market states
-            NLPSentiment()                    # Sentiment analysis on news or social media data
+            SMA(),                  # Simple Moving Averages
+            EMA(),                  # Exponential Moving Average
+            RSI(),                  # Relative Strength Index
+            OBV(),                  # On-Balance Volume
+            RSIObvSignal(),         # RSI + OBV Signal
+            MACD(),                 # Moving Average Convergence Divergence
+            PriceChange(),          # Price Change percentage
+            Volatility(),           # Volatility Indicator
+            BollingerBands(),       # Bollinger Bands
+            HMM(),                  # Hidden Markov Model for market state prediction
+            RollingKMeans(),        # Rolling KMeans clustering for market states
+            NLPSentiment()          # Sentiment analysis on news or social media data
         ])
     
     
