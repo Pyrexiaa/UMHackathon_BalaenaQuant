@@ -19,7 +19,7 @@ async def load_multiple_metric_with_custom_loader():
             "tokens_transferred", "liquidations", "price-ohlcv", "open_interest"
         ],
         start_time=datetime(year=2020, month=1, day=1, tzinfo=timezone.utc),
-        end_time=datetime(year=2020, month=4, day=1, tzinfo=timezone.utc),
+        end_time=datetime(year=2025, month=4, day=1, tzinfo=timezone.utc),
         save_data=True,
         merged=True
     )
