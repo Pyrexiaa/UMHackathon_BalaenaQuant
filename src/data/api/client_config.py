@@ -1,5 +1,5 @@
 import os
-from data.constant.data_source import data_source
+from src.data.constant.data_source import data_source
 
 
 class ClientConfig:

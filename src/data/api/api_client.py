@@ -1,16 +1,15 @@
-import os
 import requests
 from dotenv import load_dotenv
 
-from data.api.client_config import ClientConfig
+from src.data.api.client_config import ClientConfig
 
-# Load environment variables from .env
 load_dotenv()
+
 
 class APIClient:
     def __init__(self, datasource_key: str):
         self.client_config = ClientConfig(datasource_key)
-        
+
     def get(self, endpoint: str):
         url = f"{self.client_config.get_base_url()}/{endpoint.lstrip('/')}"
         headers = {"X-API-Key": self.client_config.get_api_key()}
