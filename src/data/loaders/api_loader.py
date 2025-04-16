@@ -1,11 +1,10 @@
 import pandas as pd
-from data.loaders.base_loader import BaseLoader
+from .base_loader import BaseLoader
 
 class APILoader(BaseLoader):
     """
     APILoader is responsible for loading data from an API, processing it and saving the data to CSV files if needed. 
     """
-
     async def load_data(
         self, 
         metrics: list[str], 
@@ -22,8 +21,7 @@ class APILoader(BaseLoader):
         :param limit: The maximum number of data points to fetch (default is 46211).
         :param save_data: Whether to save the loaded data to CSV files (default is True).
         :param merged: Whether to merge data for multiple metrics into one dataset (default is False).
-        """
-        
+        """ 
         for metric in metrics:
             try:
                 # Construct the endpoint with query parameters
