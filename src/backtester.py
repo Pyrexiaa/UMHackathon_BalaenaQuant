@@ -5,7 +5,9 @@ from tabulate import tabulate
 from datetime import timedelta
 from .metrics import Metrics
 import os
+import warnings
 
+warnings.filterwarnings("ignore")
 
 class Backtester:
     def __init__(self, data: pd.DataFrame, strategy, initial_capital: float = 100000,
@@ -27,6 +29,7 @@ class Backtester:
         self.results = None
         self.trades = None
         self.qty_per_trade = qty_per_trade
+        self.records = None
         self.metrics = None
         
         # if output directory does not exist, create it
@@ -79,12 +82,8 @@ class Backtester:
             # Combine results
             self.results = pd.concat([backtest_results, forward_results])
             self.trades = pd.concat([backtest_trades, forward_trades])
+            self.records = pd.concat([backtest_records, forward_records])
             
-            # Save results to CSV
-            self.results.to_csv("output/portfolio.csv")
-            self.trades.to_csv("output/transaction.csv")        
-            pd.concat([backtest_records, forward_records]).to_csv("output/records.csv")
-
             self.periods = {
                 'backtest': {
                     'start': backtest_results.index[0],
@@ -137,7 +136,7 @@ class Backtester:
         portfolio['price_change'] = data['close'].pct_change().fillna(0)
         portfolio['signal'] = self.strategy.generate_signals(data)
         portfolio['signal'] = portfolio['signal'].replace({0: -1, 1: 0, 2: 1})
-        portfolio['position'] = portfolio['signal'].replace(to_replace=0, method='ffill').fillna(0)  # forward fill previous position
+        portfolio['position'] = portfolio['signal'].replace(0, pd.NA).ffill().fillna(0)  # forward fill previous position
         # portfolio['trades'] = abs(portfolio['position'].diff().fillna(0))
         portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position'])))
         
@@ -177,7 +176,6 @@ class Backtester:
         portfolio['cash'] = cash_history
         portfolio['equity'] = equity_history
         portfolio['shares'] = shares_history
-        # portfolio['drawdown'] = portfolio['equity'] - portfolio['equity'].cummax()
         portfolio['drawdown'] = (portfolio['equity'] - portfolio['equity'].cummax()) / portfolio['equity'].cummax()
         portfolio['pnl'] = portfolio['equity'].diff().fillna(0)
 
@@ -199,10 +197,10 @@ class Backtester:
             row = records.iloc[i]
             time = records.index[i]
             price = row['price']
-            trades = int(row['trades'])               # total trades in row
-            net_shares = row['shares']                # resulting position
+            trades = int(row['trades'])              # total trades in row
+            net_shares = row['shares']               # resulting position
             position = int(row['position'])          # 1 for long, -1 for short
-            equity = row['equity']                    # current equity
+            equity = row['equity']                   # current equity
 
             # Determine direction of each individual trade
             if trades == 0:
@@ -248,13 +246,6 @@ class Backtester:
         records = records[['trade_signal', 'trades', 'trade_shares', 'price', 'shares', 'cash', 'equity']]
      
         return portfolio, transaction, records
-
-
-    # def _calculate_drawdown(self, equity_curve: pd.Series) -> pd.Series:
-    #     """Calculate drawdown from equity curve."""
-    #     running_max = equity_curve.cummax()
-    #     drawdown = (equity_curve - running_max) / running_max
-    #     return drawdown
 
     def _calculate_metrics(self, results: pd.DataFrame, trades: pd.DataFrame) -> Dict:
         """Calculate metrics for a specific period."""
@@ -357,12 +348,14 @@ class Backtester:
             print("COMBINED PERFORMANCE".center(60))
             print("=" * 60)
             self._print_phase_report('full')
+            print("=" * 60)
         else:
             # Show single phase
             print("\n" + "=" * 60)
             print(f"{phase.upper()} PHASE PERFORMANCE".center(60))
             print("=" * 60)
             self._print_phase_report(phase)
+            print("=" * 60)
 
     def _print_phase_report(self, phase: str):
         """Print report for a specific phase."""
@@ -406,12 +399,13 @@ class Backtester:
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]
         print(tabulate(info_data + perf_data, tablefmt="plain"))
 
-    def export_data(self, results_path='output/backtest_results.csv', trades_path='output/trade_log.csv'):
+    def export_data(self, results_path='output/portfolio2.csv', trades_path='output/transaction2.csv', records_path='output/records2.csv'):
         """
         Export the results and trades to CSV files.
 
         :param results_path: File path to save the backtest results
         :param trades_path: File path to save the trade logs
+        :param records_path: File path of backtest and forward test records
         """
         if self.results is not None:
             self.results.to_csv(results_path)
@@ -424,6 +418,13 @@ class Backtester:
             print(f"Trades saved to {trades_path}")
         else:
             print("No trades to export.")
+        
+        if self.records is not None: 
+            self.records.to_csv(records_path)
+            print(f"Records saved to {records_path}")
+        else:
+            print("No records to export.")
+
             
     def export_metrics(self, filepath="output/metrics.csv"):
         """Export calculated performance metrics to a CSV file."""
