@@ -2,8 +2,8 @@ import asyncio
 from datetime import datetime, timezone
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
-from src.data import APILoader, CustomLoader
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
+from quantpilot.data import APILoader, CustomLoader
 
 async def load_multiple_metric_with_custom_loader():
     """

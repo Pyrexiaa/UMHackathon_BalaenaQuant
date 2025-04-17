@@ -1,4 +1,4 @@
-from src.data import DataLoader
+from quantpilot.data import DataLoader
 
 loader = DataLoader()
 metrics = [

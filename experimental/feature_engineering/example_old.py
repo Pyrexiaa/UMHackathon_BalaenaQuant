@@ -4,11 +4,11 @@ import numpy as np
 import sys
 import os
 
-# Add the path to your 'src' folder dynamically
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
+# Add the path to your 'quantpilot' folder dynamically
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
 
-from src.features.technical_indicators import MovingAverageFeature, VolatilityFeature
-from src.features.ml_features import HMMFeature
+from quantpilot.features.technical_indicators import MovingAverageFeature, VolatilityFeature
+from quantpilot.features.ml_features import HMMFeature
 from hmmlearn.hmm import GaussianHMM
 
 # Create a simple DataFrame with 'close' prices

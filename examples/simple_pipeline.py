@@ -1,9 +1,7 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 import asyncio
-from src.data import DataLoader
-from src.features import FeaturePipeline
+
+from quantpilot.data import DataLoader
+from quantpilot.features import FeaturePipeline
 
 async def main():
     loader = DataLoader()

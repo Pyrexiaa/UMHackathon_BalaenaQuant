@@ -8,7 +8,7 @@ Prerequisites:
 - Python 3.10 or higher
 - To install the dependencies, run the following command:
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Project Structure
@@ -23,7 +23,7 @@ QuantPilot/
 │
 ├── experimental/                       # Experimental modules and in-development features
 │
-├── src/                                # Main source code for the QuantPilot system
+├── quantpilot/                                # Main source code for the QuantPilot system
 │   ├── data/                           # Data loading and preprocessing utilities
 │   │   ├── api/                        # External API integrations (e.g., price feeds)
 │   │   └── loader/                     # Functions to load and prepare data from various sources
@@ -59,9 +59,9 @@ QuantPilot/
 ## Usage
 
 ```python
-from src.backtester import Backtester
-from src.strategy import MLStrategy
-from src.models import get_model
+from quantpilot.backtester import Backtester
+from quantpilot.strategy import MLStrategy
+from quantpilot.models import get_model
 
 if __name__ == "__main__":
     bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")))

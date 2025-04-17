@@ -5,7 +5,7 @@ from hmmlearn import hmm
 from sklearn.cluster import KMeans
 from .base_feature import BaseFeature
 
-SENTIMENT_FILE_PATH = 'src/features/data/bitcoin_sentiments_21_24.csv'
+SENTIMENT_FILE_PATH = 'quantpilot/features/data/bitcoin_sentiments_21_24.csv'
 
 class HMM(BaseFeature):
     def __init__(self, feature_cols: List[str] = ["close", "volume"], n_components: int = 3, n_iter: int = 1000):

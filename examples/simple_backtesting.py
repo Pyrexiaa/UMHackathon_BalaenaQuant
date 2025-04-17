@@ -1,13 +1,10 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
-from examples.sample_data import BTC_DATA
-from src.backtester import Backtester
-from src.strategy import MLStrategy
-from src.models import get_model
-import pandas as pd
-from src.strategy.ma_crossover_strategy import MACrossoverStrategy
-from src.strategy.base_strategy import BaseStrategy
+from sample_data import BTC_DATA
+from quantpilot.backtester import Backtester
+from quantpilot.strategy import MLStrategy
+from quantpilot.models import get_model
+from quantpilot.strategy.ma_crossover_strategy import MACrossoverStrategy
+from quantpilot.strategy.base_strategy import BaseStrategy
+from quantpilot.visualization import run_dashboard
 
 if __name__ == "__main__":
     
@@ -18,7 +15,7 @@ if __name__ == "__main__":
 
     # Plot results
     bt.export_data()  # Save results and trades to file
-    os.system("streamlit run src/visualization/visualize_streamlit.py")
+    run_dashboard()
 
     
     

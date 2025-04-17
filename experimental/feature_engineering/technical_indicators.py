@@ -1,6 +1,6 @@
 import pandas as pd
 import ta.volume
-from src.features.base_feature import BaseFeature
+from quantpilot.features.base_feature import BaseFeature
 import numpy as np
 import ta
 from typing import List

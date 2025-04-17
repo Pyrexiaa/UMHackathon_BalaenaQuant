@@ -8,14 +8,14 @@ st.title("Backtest Visualization")
 
 # Load backtest results
 try:
-    df = pd.read_csv("output/backtest_results.csv", parse_dates=True, index_col=0)
+    df = pd.read_csv("output/portfolio.csv", parse_dates=True, index_col=0)
 except FileNotFoundError:
     st.error("No backtest results found. Run the backtest first.")
     st.stop()
 
 # Plot equity curve
 st.subheader("Equity Curve")
-st.line_chart(df['total'])
+st.line_chart(df['equity'])
 
 # Plot drawdown
 st.subheader("Drawdown")
@@ -26,8 +26,8 @@ st.subheader("Trading Signals")
 fig, ax = plt.subplots(figsize=(14, 6))
 ax.plot(df['price'], label='Price', color='black', alpha=0.5)
 
-buy_signals = df[df['signal'] == 2]
-sell_signals = df[df['signal'] == 0]
+buy_signals = df[df['signal'] == 1]
+sell_signals = df[df['signal'] == -1]
 
 ax.scatter(buy_signals.index, buy_signals['price'], color='green', marker='^', label='Buy', alpha=1)
 ax.scatter(sell_signals.index, sell_signals['price'], color='red', marker='v', label='Sell', alpha=1)

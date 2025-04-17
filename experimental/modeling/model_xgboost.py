@@ -15,8 +15,8 @@ import json
 
 import sys
 
-# Add the path to your 'src' folder dynamically
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
+# Add the path to your 'quantpilot' folder dynamically
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
 
 # from features.technical_indicators import MovingAverageFeature, VolatilityFeature
 
@@ -24,7 +24,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../s
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
 RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
-MODEL_DIR = Path("src/models_weights/xgboost")
+MODEL_DIR = Path("quantpilot/models_weights/xgboost")
 FEE_RATE = 0.0006
 
 # Ensure output directories exist

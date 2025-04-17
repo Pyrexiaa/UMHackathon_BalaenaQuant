@@ -5,8 +5,8 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-from src.data.api.api_client import APIClient
-from src.data.constant.data_source import data_source
+from quantpilot.data.api.api_client import APIClient
+from quantpilot.data.constant.data_source import data_source
 
 class BaseLoader(ABC):
     """

@@ -139,7 +139,7 @@ class TabNetModel(BaseModel):
 
 # # === Configs ===
 # FEE_RATE = 0.006
-# MODEL_DIR = "src/models_weights/tabnet"
+# MODEL_DIR = "quantpilot/models_weights/tabnet"
 # MODEL_PATH = os.path.join(MODEL_DIR, "model")
 # SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
 

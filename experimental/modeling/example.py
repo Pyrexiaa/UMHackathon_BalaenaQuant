@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
 
 from models.xgboost.model import XGBoostModel
 from sklearn.model_selection import train_test_split

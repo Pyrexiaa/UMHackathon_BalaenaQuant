@@ -410,7 +410,7 @@ class Backtester:
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]
         print(tabulate(info_data + perf_data, tablefmt="plain"))
 
-    def export_data(self, results_path='output/portfolio2.csv', trades_path='output/transaction2.csv', records_path='output/records2.csv'):
+    def export_data(self, results_path='output/portfolio.csv', trades_path='output/transaction.csv', records_path='output/records.csv'):
         """
         Export the results and trades to CSV files.
 

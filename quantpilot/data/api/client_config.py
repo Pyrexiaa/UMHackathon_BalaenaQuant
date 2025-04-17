@@ -1,5 +1,5 @@
 import os
-from src.data.constant.data_source import data_source
+from quantpilot.data.constant.data_source import data_source
 
 
 class ClientConfig:

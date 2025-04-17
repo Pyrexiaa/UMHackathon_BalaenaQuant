@@ -1,7 +1,7 @@
 import requests
 from dotenv import load_dotenv
 
-from src.data.api.client_config import ClientConfig
+from quantpilot.data.api.client_config import ClientConfig
 
 load_dotenv()
 

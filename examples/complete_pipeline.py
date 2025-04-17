@@ -1,11 +1,9 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 import asyncio
 from datetime import datetime, timezone
-from src.data import DataLoader  
-from src.features import FeaturePipeline 
-from src.features.all_features import *
+
+from quantpilot.data import DataLoader  
+from quantpilot.features import FeaturePipeline 
+from quantpilot.features.all_features import *
 
 async def main():
     loader = DataLoader()
@@ -20,17 +18,18 @@ async def main():
     df = await loader.run(metrics=metrics, start_time=start_time, end_time=end_time) 
     
     pipeline = FeaturePipeline([
-        SMA(windows=[50, 200]),
-        EMA(),
-        RSI(windows=[14]),
-        OBV(),
-        RSIObvSignal(rsi_window=14),
-        MACD(),
-        PriceChange(),
-        Volatility(),
-        BollingerBands(),
+        # SMA(windows=[50, 200]),
+        # EMA(),
+        # RSI(windows=[14]),
+        # OBV(),
+        # RSIObvSignal(rsi_window=14),
+        # MACD(),
+        # PriceChange(),
+        # Volatility(),
+        # BollingerBands(),
         HMM(),
-        RollingKMeans(),
+        ZSCORE(),
+        # RollingKMeans(),
         NLPSentiment()
     ])
     new_df = pipeline.add_features(df)

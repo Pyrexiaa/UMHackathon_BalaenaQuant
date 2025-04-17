@@ -1,5 +1,5 @@
-from src.features import FeaturePipeline
-from src.features.all_features import *
+from quantpilot.features import FeaturePipeline
+from quantpilot.features.all_features import *
 import pandas as pd
 
 df = pd.read_csv("your_price_data.csv")
@@ -24,7 +24,7 @@ new_df = pipeline.add_features(df)
 
 
 # Add a new technical indicators
-from ...src.features.base_feature import BaseFeature
+from ...quantpilot.features.base_feature import BaseFeature
 import pandas as pd
 
 class ZScore(BaseFeature):

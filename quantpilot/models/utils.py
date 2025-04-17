@@ -42,14 +42,3 @@ class ModelUtils:
                 return joblib.load(path)
             except Exception as e_joblib:
                 raise RuntimeError(f"Failed to load model with both PyTorch ({e_torch}) and joblib ({e_joblib}).")
-
-    @staticmethod
-    def get_model(name: str, **kwargs):
-        """
-        Retrieve a model by name from the defaults directory.
-
-        :param name: Model name
-        :return: Loaded model object
-        """
-        if name == "tcn":
-            return TCNModel(**kwargs)
