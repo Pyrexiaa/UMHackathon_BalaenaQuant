@@ -15,23 +15,10 @@ if __name__ == "__main__":
     bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")))
     # bt = Backtester(data=BTC_DATA, strategy=MACrossoverStrategy(short_window=5, long_window=13))
     bt.run(forward_test=True, forward_start_date="2024-01-01")
+
+    # Plot results
+    bt.export_data()  # Save results and trades to file
+    os.system("streamlit run src/visualization/visualize_streamlit.py")
+
     
-    bt.export_data()
-    bt.plot_results()
-
-
-# Backtesting with 'target' column
-# if __name__ == "__main__":
-#     class TargetStrategy(BaseStrategy):
-#         def generate_signals(self, X: pd.DataFrame) -> pd.Series:
-#             # Generate signals based on target column
-#             signal = X['positions'].copy()
-#             signal = pd.Series(signal, index=X.index)
-#             return signal
-        
-#     # Run backtest and forward test
-#     bt = Backtester(data=BTC_DATA, strategy=TargetStrategy())
-#     bt.run(forward_test=True, forward_start_date="2024-01-01")
-
-#     # Plot results
-#     bt.plot_results()
+    

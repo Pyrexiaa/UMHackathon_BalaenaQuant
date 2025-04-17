@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Optional, Tuple
@@ -282,11 +283,11 @@ class Backtester:
         else:
             return self._calculate_metrics(self.results, self.trades)
 
-    def plot_results(self):
+    def plot_results(self, use_streamlit: bool = False):
         """Plot backtest results."""
         if self.results is None:
-            raise ValueError(
-                "No backtest results available. Run backtest first.")
+            raise ValueError("No backtest results available. Run backtest first.")
+
 
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
 
@@ -298,7 +299,7 @@ class Backtester:
         ax1.legend()
 
         # Drawdown
-        ax2.fill_between(self.results.index, self.results['drawdown'],color='red', alpha=0.3)
+        ax2.fill_between(self.results.index, self.results['drawdown'], color='red', alpha=0.3)
         ax2.set_ylabel('Drawdown')
         ax2.set_title('Portfolio Drawdown')
         ax2.grid(True, linestyle='--', alpha=0.7)
@@ -315,10 +316,20 @@ class Backtester:
         ax3.set_title('Trading Signals')
         ax3.grid(True, linestyle='--', alpha=0.7)
         ax3.legend()
-        
+
         plt.tight_layout()
-        plt.savefig("output/result.png") 
-        plt.show()
+
+        # Save to file
+        output_path = "output/result.png"
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        plt.savefig(output_path)
+
+        if use_streamlit:
+            import streamlit as st
+            st.pyplot(fig)
+        else:
+            plt.show()
+
 
     def generate_report(self, phase: str = 'all'):
         """
