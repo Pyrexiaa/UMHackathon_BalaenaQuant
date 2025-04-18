@@ -395,7 +395,7 @@ def plot_results(df, equity, signals, set_name="validation"):
     plt.close()
 
 if __name__ == "__main__":
-    dataset_path = "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
+    dataset_path = "experimental/datasets/btc_data_with_target_latest.csv"
     # --- Load CSV ---
     raw_df_train, raw_df_val, raw_df_test = load_csv(dataset_path)
     # --- Prepare features ---
