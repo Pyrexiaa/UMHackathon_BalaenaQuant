@@ -5,14 +5,15 @@ from typing import Dict, Optional, Tuple
 from tabulate import tabulate
 from datetime import timedelta
 from .metrics import Metrics
-import os
 import warnings
+from .strategy import BaseStrategy
 
 warnings.filterwarnings("ignore")
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy, strategy_name, initial_capital: float = 100000,
-                 risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1):
+    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'strategy1', initial_capital: float = 100000,
+                 risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1,
+                 mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
         """
         Initialize the backtester with strategy, data, and configuration.
 
@@ -21,10 +22,13 @@ class Backtester:
         :param initial_capital: Starting capital for the portfolio
         :param risk_free_rate: Annual risk-free rate for Sharpe ratio calculation
         :param trading_fee: Fee per trade (default 0.06%)
+        :param qty_per_trade: Number of shares per trade
+        :param mode: Mode of calculation ('arithmetic' or 'geometric')
+        :param entry_exit_logic: Entry and exit logic ('trend_following' or 'mean_reversion')
         """
         self.data = data
         self.strategy = strategy 
-        self.strategy_name = strategy_name or "strategy1"
+        self.strategy_name = strategy_name
         self.initial_capital = initial_capital
         self.risk_free_rate = risk_free_rate
         self.trading_fee = trading_fee
@@ -33,6 +37,8 @@ class Backtester:
         self.qty_per_trade = qty_per_trade
         self.records = None
         self.metrics = None
+        self.mode = mode
+        self.entry_exit_logic = entry_exit_logic
         
         # if output directory does not exist, create it
         if not os.path.exists("output"):
@@ -91,34 +97,37 @@ class Backtester:
                     'start': backtest_results.index[0],
                     'end': backtest_results.index[-1],
                     'results': backtest_results,
-                    'trades': backtest_trades
+                    'trades': backtest_trades,
+                    'records': backtest_records                    
                 },
                 'forward': {
                     'start': forward_results.index[0],
                     'end': forward_results.index[-1],
                     'results': forward_results,
-                    'trades': forward_trades
+                    'trades': forward_trades,
+                    'records': forward_records
                 }
             }
 
             output['metrics'] = {
-                'backtest': self._calculate_metrics(backtest_results, backtest_trades),
-                'forward': self._calculate_metrics(forward_results, forward_trades),
-                'full': self._calculate_metrics(self.results, self.trades)
+                'backtest': self._calculate_metrics(backtest_results, backtest_trades, backtest_records),
+                'forward': self._calculate_metrics(forward_results, forward_trades, forward_records),
+                'full': self._calculate_metrics(self.results, self.trades, self.records)
             }
 
         else:
-            self.results, self.trades = self._run_phase(self.data)
+            self.results, self.trades, self.records = self._run_phase(self.data)
             self.periods = {
                 'full': {
                     'start': self.results.index[0],
                     'end': self.results.index[-1],
                     'results': self.results,
-                    'trades': self.trades
+                    'trades': self.trades,
+                    'records': self.records
                 }
             }
             output['metrics'] = {
-                'full': self._calculate_metrics(self.results, self.trades)
+                'full': self._calculate_metrics(self.results, self.trades, self.records)
             }
 
         output['results'] = self.results
@@ -127,135 +136,230 @@ class Backtester:
 
         return output
 
-    def _run_phase(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _run_phase(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Run a single phase (backtest or forward test) of the strategy.
 
         :param data: DataFrame with historical price data
-        :return: Tuple of (portfolio_results, trades_dataframe)
+        :return: Tuple of (portfolio_results, trades_dataframe, records_dataframe)
         """
-        portfolio = pd.DataFrame(index=data.index)
-        portfolio['price'] = data['close']
-        portfolio['price_change'] = data['close'].pct_change().fillna(0)
-        portfolio['signal'] = self.strategy.generate_signals(data)
-        portfolio['position'] = portfolio['signal'].replace(0, pd.NA).ffill().fillna(0)  # forward fill previous position
-        # portfolio['trades'] = abs(portfolio['position'].diff().fillna(0))
-        portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position'])))
-        
-        # Capital tracking variables
-        capital = self.initial_capital
-        # position_size = 0.5
-        cash = capital
-        shares_held = 0
+        if self.mode not in ['arithmetic', 'geometric']:
+            raise ValueError("Invalid mode. Choose 'arithmetic' or 'geometric'.")
+        if self.entry_exit_logic not in ['trend_following', 'mean_reversion']:
+            raise ValueError("Invalid entry/exit logic. Choose 'trend_following' or 'mean_reversion'.")
+        else:
+            portfolio = pd.DataFrame(index=data.index)
+            portfolio['price'] = data['close']
+            portfolio['price_change'] = data['close'].pct_change().fillna(0)
+            portfolio['signal'] = self.strategy.generate_signals(data)
+            if self.entry_exit_logic == 'trend_following':
+                print("Entry/Exit Logic: Trend Following")
+                portfolio['position'] = portfolio['signal'].replace(0, pd.NA).ffill().fillna(0)  # forward fill previous position
+                portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position'])))
+            elif self.entry_exit_logic == 'mean_reversion':
+                print("Entry/Exit Logic: Mean Reversion")
+                portfolio['position'] = portfolio['signal'].copy()
+                portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position']))) 
+                    
+            if self.mode == 'geometric':
+                print("Mode: Geometric")
+                # Capital tracking variables
+                capital = self.initial_capital
+                # position_size = 0.5
+                cash = capital
+                shares_held = 0
 
-        equity_history = []
-        cash_history = []
-        shares_history = []
+                equity_history = []
+                cash_history = []
+                shares_history = []
 
-        # Execute trades and track capital
-        for i in range(len(portfolio)):
-            price = portfolio.iloc[i]['price']
-            position = portfolio.iloc[i]['position']
-            trade = portfolio.iloc[i]['trades']
+                # Execute trades and track capital
+                for i in range(len(portfolio)):
+                    price = portfolio.iloc[i]['price']
+                    position = portfolio.iloc[i]['position']
+                    trade = portfolio.iloc[i]['trades']
 
-            if trade != 0:
-                if position == 1:
-                    # Buy
-                    buyable = trade * self.qty_per_trade
-                    cash -= buyable * price * (1 + self.trading_fee)
-                    shares_held += buyable
-                elif position == -1:
-                    # Sell
-                    sellable = trade * self.qty_per_trade
-                    cash += sellable * price * (1 - self.trading_fee)
-                    shares_held -= sellable
+                    if trade != 0:
+                        if position == 1:
+                            # Buy
+                            buyable = trade * self.qty_per_trade
+                            cash -= buyable * price * (1 + self.trading_fee)
+                            shares_held += buyable
+                        elif position == -1:
+                            # Sell
+                            sellable = trade * self.qty_per_trade
+                            cash += sellable * price * (1 - self.trading_fee)
+                            shares_held -= sellable
+                        elif position == 0:
+                            # Close position
+                            cash += shares_held * price * (1 - self.trading_fee)
+                            shares_held = 0
+                    
+                    current_equity = cash + shares_held * price
+                    equity_history.append(current_equity)
+                    cash_history.append(cash)
+                    shares_history.append(shares_held)
+
+                portfolio['cash'] = cash_history
+                portfolio['equity'] = equity_history
+                portfolio['shares'] = shares_history
+                portfolio['drawdown'] = (portfolio['equity'] - portfolio['equity'].cummax()) / portfolio['equity'].cummax()
+                portfolio['pnl'] = portfolio['equity'].diff().fillna(0)
+
+                # Create transaction record
+                records = portfolio.copy()
+                # drop all trade == 0
+                records = records[records['trades'] != 0]
+                records['trade_signal'] = records['position'].replace(
+                    {1: 'Buy', -1: 'Sell', 0: 'Close'})
+                
+                transaction = pd.DataFrame(columns=[
+                    'mode', 'entry_position', 'trades', 'trade_shares', 'entry_time', 'exit_time',
+                    'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity'
+                ])
+
+                open_trades = []
+
+                for i in range(len(records)):
+                    row = records.iloc[i]
+                    time = records.index[i]
+                    price = row['price']
+                    trades = int(row['trades'])              # total trades in row
+                    net_shares = row['shares']               # resulting position
+                    position = int(row['position'])          # 1 for long, -1 for short
+                    equity = row['equity']                   # current equity
+
+                    # Determine direction of each individual trade
+                    if trades == 0:
+                        continue
+
+                    for _ in range(trades):
+                        # If no open trade or same direction, this is an entry
+                        if not open_trades or open_trades[-1]['entry_position'] == position:
+                            open_trades.append({
+                                'entry_position': position,
+                                'entry_time': time,
+                                'entry_price': price
+                            })
+                        else:
+                            # This is an exit of opposite position
+                            entry = open_trades.pop()
+                            matched_position = entry['entry_position']
+                            pnl = (price - entry['entry_price']) * matched_position 
+
+                            transaction = pd.concat([transaction if not transaction.empty else pd.DataFrame(),
+                                pd.DataFrame([{
+                                'entry_position': matched_position,
+                                'trades': 1,
+                                'trade_shares': 1 * self.qty_per_trade,
+                                'entry_time': entry['entry_time'],
+                                'exit_time': time,
+                                'entry_price': entry['entry_price'],
+                                'exit_price': price,
+                                'pnl_per_share': pnl,
+                                'pnl': pnl * self.qty_per_trade,
+                                'remaining_shares': net_shares,
+                                'equity': equity
+                            }])], ignore_index=True)
+
+                # transaction['mode'] = transaction['entry_position'].apply(
+                #     lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy')
+                transaction['mode'] = transaction['entry_position'].apply(
+                    lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy' if x == -1 else 'Close')
+                # drop the entry_position column
+                transaction.drop(columns=['entry_position'], inplace=True)
+                transaction = transaction[['mode', 'trades', 'trade_shares', 'entry_time', 'exit_time',
+                                        'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity']]
+                
+                records['trade_shares'] = records['trades'].apply(
+                    lambda x: x * self.qty_per_trade if x != 0 else 0)
+                records = records[['trade_signal', 'trades', 'trade_shares', 'price', 'shares', 'cash', 'equity']]
             
-            current_equity = cash + shares_held * price
-            equity_history.append(current_equity)
-            cash_history.append(cash)
-            shares_history.append(shares_held)
+                return portfolio, transaction, records
+            
+            elif self.mode == 'arithmetic':
+                print("Mode: Arithmetic")
+                # PNL = price_pct_change * previous_position - current_trades * fees
+                portfolio['pnl'] = (portfolio['price_change'] * (portfolio['position'].shift(1).fillna(0)) 
+                                    - portfolio['trades'] * self.trading_fee)      
+                # Equity = sum(previous all pnl: current pnl)
+                portfolio['equity'] = portfolio['pnl'].cumsum() 
+                # Drawdown = current equity - max(previous equity)
+                portfolio['drawdown'] = (portfolio['equity'] - portfolio['equity'].cummax()) 
 
-        portfolio['cash'] = cash_history
-        portfolio['equity'] = equity_history
-        portfolio['shares'] = shares_history
-        portfolio['drawdown'] = (portfolio['equity'] - portfolio['equity'].cummax()) / portfolio['equity'].cummax()
-        portfolio['pnl'] = portfolio['equity'].diff().fillna(0)
+                # Create transaction record
+                records = portfolio.copy()
+                # drop all trade == 0
+                records = records[records['trades'] != 0]
+                records['trade_signal'] = records['position'].replace(
+                    {1: 'Buy', -1: 'Sell', 0: 'Close'})
+                
+                transaction = pd.DataFrame(columns=[
+                    'mode', 'entry_position', 'trades', 'entry_time', 'exit_time',
+                    'entry_price', 'exit_price', 'pnl', 'remaining_shares', 'equity'
+                ])
 
-        # Create transaction record
-        records = portfolio.copy()
-        # drop all trade == 0
-        records = records[records['trades'] != 0]
-        records['trade_signal'] = records['position'].replace(
-            {1: 'Buy', -1: 'Sell', 0: 'Hold'})
-        
-        transaction = pd.DataFrame(columns=[
-            'mode', 'entry_position', 'trade_shares', 'entry_time', 'exit_time',
-            'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity'
-        ])
+                open_trades = []
 
-        open_trades = []
+                for i in range(len(records)):
+                    row = records.iloc[i]
+                    time = records.index[i]
+                    price = row['price']
+                    trades = int(row['trades'])               # total trades in row
+                    position = int(row['position'])          # 1 for long, -1 for short
+                    equity = row['equity']                    # current equity
 
-        for i in range(len(records)):
-            row = records.iloc[i]
-            time = records.index[i]
-            price = row['price']
-            trades = int(row['trades'])              # total trades in row
-            net_shares = row['shares']               # resulting position
-            position = int(row['position'])          # 1 for long, -1 for short
-            equity = row['equity']                   # current equity
+                    # Determine direction of each individual trade
+                    if trades == 0:
+                        continue
 
-            # Determine direction of each individual trade
-            if trades == 0:
-                continue
+                    for _ in range(trades):
+                        # If no open trade or same direction, this is an entry
+                        if not open_trades or open_trades[-1]['entry_position'] == position:
+                            open_trades.append({
+                                'entry_position': position,
+                                'entry_time': time,
+                                'entry_price': price
+                            })
+                        else:
+                            # This is an exit of opposite position
+                            entry = open_trades.pop()
+                            matched_position = entry['entry_position']
+                            pnl = (price - entry['entry_price']) / entry['entry_price'] * matched_position # use pct change
 
-            for _ in range(trades):
-                # If no open trade or same direction, this is an entry
-                if not open_trades or open_trades[-1]['entry_position'] == position:
-                    open_trades.append({
-                        'entry_position': position,
-                        'entry_time': time,
-                        'entry_price': price
-                    })
-                else:
-                    # This is an exit of opposite position
-                    entry = open_trades.pop()
-                    matched_position = entry['entry_position']
-                    pnl = (price - entry['entry_price']) * matched_position 
+                            transaction = pd.concat([transaction if not transaction.empty else pd.DataFrame(),
+                                pd.DataFrame([{
+                                'entry_position': matched_position,
+                                'trades': 1,
+                                'entry_time': entry['entry_time'],
+                                'exit_time': time,
+                                'entry_price': entry['entry_price'],
+                                'exit_price': price,
+                                'pnl': pnl,
+                                'remaining_shares': position,
+                                'equity': equity
+                            }])], ignore_index=True)
 
-                    transaction = pd.concat([transaction if not transaction.empty else pd.DataFrame(),
-                        pd.DataFrame([{
-                        'entry_position': matched_position,
-                        'trade_shares': 1 * self.qty_per_trade,
-                        'entry_time': entry['entry_time'],
-                        'exit_time': time,
-                        'entry_price': entry['entry_price'],
-                        'exit_price': price,
-                        'pnl_per_share': pnl,
-                        'pnl': pnl * self.qty_per_trade,
-                        'remaining_shares': net_shares,
-                        'equity': equity
-                    }])], ignore_index=True)
-
-        transaction['mode'] = transaction['entry_position'].apply(
-            lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy')
-        # drop the entry_position column
-        transaction.drop(columns=['entry_position'], inplace=True)
-        transaction = transaction[['mode', 'trade_shares', 'entry_time', 'exit_time',
-                                   'entry_price', 'exit_price', 'pnl_per_share', 'pnl', 'remaining_shares', 'equity']]
-        
-        records['trade_shares'] = records['trades'].apply(
-            lambda x: x * self.qty_per_trade if x != 0 else 0)
-        records = records[['trade_signal', 'trades', 'trade_shares', 'price', 'shares', 'cash', 'equity']]
-     
-        return portfolio, transaction, records
-
-    def _calculate_metrics(self, results: pd.DataFrame, trades: pd.DataFrame) -> Dict:
+                # transaction['mode'] = transaction['entry_position'].apply(
+                #     lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy')
+                transaction['mode'] = transaction['entry_position'].apply(
+                lambda x: 'Buy→Sell' if x == 1 else 'Sell→Buy' if x == -1 else 'Close')
+                # drop the entry_position column
+                transaction.drop(columns=['entry_position'], inplace=True)
+                transaction = transaction[['mode', 'trades', 'entry_time', 'exit_time',
+                                        'entry_price', 'exit_price', 'pnl', 'remaining_shares', 'equity']]
+                
+                records = records[['trade_signal', 'trades', 'price', 'equity']]
+                return portfolio, transaction, records
+            
+    def _calculate_metrics(self, results: pd.DataFrame, trades: pd.DataFrame, records: pd.DataFrame) -> Dict:
         """Calculate metrics for a specific period."""
         return Metrics(
             equity=results['equity'],
             drawdown=results['drawdown'],
             returns=results['pnl'],
             trades=trades,
+            records=records,
             risk_free_rate=self.risk_free_rate,
             trading_fee=self.trading_fee,
             signals=results['signal']
@@ -274,15 +378,17 @@ class Backtester:
         if phase == 'backtest' and 'backtest' in self.periods:
             return self._calculate_metrics(
                 self.periods['backtest']['results'],
-                self.periods['backtest']['trades']
+                self.periods['backtest']['trades'],
+                self.periods['backtest']['records']
             )
         elif phase == 'forward' and 'forward' in self.periods:
             return self._calculate_metrics(
                 self.periods['forward']['results'],
-                self.periods['forward']['trades']
+                self.periods['forward']['trades'],
+                self.periods['forward']['records']
             )
         else:
-            return self._calculate_metrics(self.results, self.trades)
+            return self._calculate_metrics(self.results, self.trades, self.records)
 
     def plot_results(self, use_streamlit: bool = False):
         """Plot backtest results."""
@@ -293,11 +399,30 @@ class Backtester:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
 
         # Equity curve
-        ax1.plot(self.results['equity'], label='Portfolio Value', color='blue')
-        ax1.set_ylabel('Portfolio Value ($)')
-        ax1.set_title('Equity Curve')
+        # ax1.plot(self.results['equity'], label='Portfolio Value', color='blue')
+        # ax1.set_ylabel('Portfolio Value ($)')
+        # ax1.set_title('Equity Curve')
+        # ax1.grid(True, linestyle='--', alpha=0.7)
+        # ax1.legend()
+        # Dual-axis Equity + Close Price Plot
+        ax1.set_title('close_price and equity')
+        ax1.set_ylabel("close_price", color='blue')
+        ax1.plot(self.results['price'], color='blue', label='close_price')
+        ax1.tick_params(axis='y', labelcolor='blue')
+
+        # Secondary y-axis for equity
+        ax1b = ax1.twinx()
+        ax1b.set_ylabel("equity", color='red')
+        ax1b.plot(self.results['equity'], color='red', label='equity')
+        ax1b.tick_params(axis='y', labelcolor='red')
+
+        # Combined legend
+        lines_1, labels_1 = ax1.get_legend_handles_labels()
+        lines_2, labels_2 = ax1b.get_legend_handles_labels()
+        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
+
         ax1.grid(True, linestyle='--', alpha=0.7)
-        ax1.legend()
+
 
         # Drawdown
         ax2.fill_between(self.results.index, self.results['drawdown'], color='red', alpha=0.3)
@@ -375,15 +500,17 @@ class Backtester:
         if phase == 'full':
             results = self.results
             trades = self.trades
+            records = self.records
             start_date = self.results.index[0]
             end_date = self.results.index[-1]
         else:
             results = self.periods[phase]['results']
             trades = self.periods[phase]['trades']
+            records = self.periods[phase]['records']
             start_date = self.periods[phase]['start']
             end_date = self.periods[phase]['end']
 
-        metrics = self._calculate_metrics(results, trades)
+        metrics = self._calculate_metrics(results, trades, records)
 
         def fmt_value(name, value):
             if isinstance(value, float):
@@ -400,10 +527,12 @@ class Backtester:
         info_data = [
             ["Start Date", start_date.date()],
             ["End Date", end_date.date()],
-            ["Duration (days)", len(results)],
-            ["Initial Capital", f"${self.initial_capital:,.2f}"],
-            ["Final Equity", f"${results['equity'].iloc[-1]:,.2f}"]
+            ["Duration (days)", (end_date - start_date).days],
+            ["Data rows", len(results)],
         ]
+        if self.mode == 'geometric':
+            info_data.append(["Initial Capital", f"${self.initial_capital:,.2f}"])
+            info_data.append(["Final Equity", f"${results['equity'].iloc[-1]:,.2f}"])
 
         # Performance metrics
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]

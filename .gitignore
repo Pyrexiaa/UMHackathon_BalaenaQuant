@@ -27,6 +27,9 @@ output/
 # Ignore virtual environment directory (if named 'env' or 'venv')
 env/
 venv/
+lib/
+bin/
+include/
 
 archive
 
