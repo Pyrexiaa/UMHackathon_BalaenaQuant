@@ -4,7 +4,7 @@ import pandas as pd
 from quantpilot.multibacktester import Multibacktester
 from quantpilot.models import get_model
 
-# Run them together
+# Run multiple strategies together
 bt = Multibacktester(
     data=BTC_DATA,
     strategies=[MLStrategy(get_model("TCN")), MLStrategy(get_model("XGBOOST"))],
@@ -13,5 +13,5 @@ bt = Multibacktester(
     entry_exit_logic="mean_reversion"
 )
 
-summary = bt.run_all(forward_test=True, forward_start_date="2024-01-01")
+bt.run_all(forward_test=True, forward_start_date="2024-01-01")
 
