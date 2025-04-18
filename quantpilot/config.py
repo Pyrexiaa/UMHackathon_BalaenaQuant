@@ -1,10 +1,6 @@
 class BaseConfig:
     FEE_RATE = 0.0006
-    BUY_SIGNAL = 0
-    HOLD_SIGNAL = 1
-    SELL_SIGNAL = 2
-    BUY_THRESHOLD = 0.30
-    SELL_THRESHOLD = 0.30
+    THRESHOLD = 0.30
     WINDOW_SIZE = 4
 
 

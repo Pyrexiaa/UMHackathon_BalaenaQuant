@@ -2,8 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from quantpilot.data import DataLoader  
-from quantpilot.features import FeaturePipeline 
-from quantpilot.features.all_features import *
+from quantpilot.features import add_hmm_features, add_nlp_sentiment_score
 
 async def main():
     loader = DataLoader()
@@ -17,23 +16,10 @@ async def main():
     end_time = datetime(2025, 4, 1, tzinfo=timezone.utc)   
     df = await loader.run(metrics=metrics, start_time=start_time, end_time=end_time) 
     
-    pipeline = FeaturePipeline([
-        # SMA(windows=[50, 200]),
-        # EMA(),
-        # RSI(windows=[14]),
-        # OBV(),
-        # RSIObvSignal(rsi_window=14),
-        # MACD(),
-        # PriceChange(),
-        # Volatility(),
-        # BollingerBands(),
-        HMM(),
-        ZSCORE(),
-        # RollingKMeans(),
-        NLPSentiment()
-    ])
-    new_df = pipeline.add_features(df)
-    new_df.to_csv('output_data2.csv', index=False)
+    df = add_hmm_features(df)
+    df = add_nlp_sentiment_score(df)
+    
+    df.to_csv('output_data.csv', index=False)
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,5 +1,5 @@
 from quantpilot.features import FeaturePipeline
-from quantpilot.features.all_features import *
+from quantpilot.features.technical_indicators import *
 import pandas as pd
 
 df = pd.read_csv("your_price_data.csv")
@@ -14,9 +14,6 @@ pipeline = FeaturePipeline([
     PriceChange(),
     Volatility(),
     BollingerBands(),
-    HMM(),
-    RollingKMeans(),
-    NLPSentiment()
 ])
 
 new_df = pipeline.add_features(df)

@@ -1,6 +1,6 @@
 import pandas as pd
 from .base_feature import BaseFeature
-from .all_features import * 
+from .technical_indicators import *
 
 class FeaturePipeline:
     """
@@ -32,9 +32,6 @@ class FeaturePipeline:
             PriceChange(),          # Price Change percentage
             Volatility(),           # Volatility Indicator
             BollingerBands(),       # Bollinger Bands
-            HMM(),                  # Hidden Markov Model for market state prediction
-            RollingKMeans(),        # Rolling KMeans clustering for market states
-            NLPSentiment()          # Sentiment analysis on news or social media data
         ])
     
     

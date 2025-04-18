@@ -26,8 +26,6 @@ class TCNModel(BaseModel):
         input_features = 12  # Specify your input features
         num_channels = [64, 128, 64] # Example for TCN channels
         self.model = TCNClassifier(input_features, 3, num_channels).to(self.device)
-        
-        # Load the model state_dict if it's a state_dict saved model
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()  # Set the model to evaluation mode
 
@@ -66,7 +64,7 @@ class TCNModel(BaseModel):
         ]
 
         # Select and clean the relevant columns
-        df = df[[f for f in features if f in df.columns]].dropna().reset_index(drop=True)
+        df = df[[f for f in features if f in df.columns]].reset_index(drop=True)
         return df
 
     def normalize(self, df):
@@ -93,18 +91,17 @@ class TCNModel(BaseModel):
             X.append(window)
         return np.array(X)
 
-   
     def predict(self, data):
         """
         Make predictions based on raw input data.
 
         :param data: Raw input data as a DataFrame
-        :return: Numpy array of predicted probabilities
+        :return: Numpy array of predicted signals
         """
         df_feat = self.prepare_features(data)
         df_scaled = self.normalize(df_feat)
         X = self.preprocess(df_scaled)
-
+        
         if len(X) == 0:
             return np.array([]), np.array([])
 
@@ -114,7 +111,31 @@ class TCNModel(BaseModel):
             print(logits.shape)
             probs = torch.softmax(logits, dim=1).cpu().numpy()
 
-        return probs
+        signals = []
+        
+        # The model's predictions will be shorter than input due to windowing
+        window_size = getattr(self.model, 'window_size', BaseConfig.WINDOW_SIZE)
+        start_idx = window_size  
+        
+        # Pad signals to match input data length
+        total_len = len(df_scaled)
+        
+        # Initialize with HOLD signals for the warmup period
+        for i in range(start_idx):
+            signals.append(0)
+            
+        for i, p in enumerate(probs, start=start_idx):
+            if i >= total_len:
+                break  # Handle case where we have extra predictions
+            p = np.array(p)
+            if p[2] > BaseConfig.THRESHOLD:
+                signals.append(1)  # Buy
+            elif p[0] > BaseConfig.THRESHOLD:
+                signals.append(-1) # Sell
+            else:
+                signals.append(0)  # Hold 
+            
+        return np.array(signals)
     
     def fit(self, X: pd.DataFrame, y: pd.Series):
         self.model.fit(X, y)

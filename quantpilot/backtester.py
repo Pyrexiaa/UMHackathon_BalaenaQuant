@@ -136,7 +136,6 @@ class Backtester:
         portfolio['price'] = data['close']
         portfolio['price_change'] = data['close'].pct_change().fillna(0)
         portfolio['signal'] = self.strategy.generate_signals(data)
-        portfolio['signal'] = portfolio['signal'].replace({0: -1, 1: 0, 2: 1})
         portfolio['position'] = portfolio['signal'].replace(0, pd.NA).ffill().fillna(0)  # forward fill previous position
         # portfolio['trades'] = abs(portfolio['position'].diff().fillna(0))
         portfolio['trades'] = abs(portfolio['position'].diff().fillna(abs(portfolio['position'])))
@@ -306,8 +305,6 @@ class Backtester:
 
         # Signals and positions
         ax3.plot(self.results['price'], label='Price', color='black', alpha=0.5)
-        # buy_signals = self.results[self.results['signal'] == 2]
-        # sell_signals = self.results[self.results['signal'] == 0]
         buy_signals = self.results[(self.results['position'] == 1) & (self.results['trades'] > 0)]
         sell_signals = self.results[(self.results['position'] == -1) & (self.results['trades'] > 0)]
         ax3.scatter(buy_signals.index, buy_signals['price'],label='Buy', marker='^', color='green', alpha=1)
