@@ -16,90 +16,122 @@ class XGBoostModel(BaseModel):
     XGBoost Model for trading signals.
     """
     
-    def __init__(self):
-        self.model = None
-        self.scaler = None
-        self.model_path = XGBConfig.XGB_MODEL_PATH
-        self.scaler_path = XGBConfig.XGB_SCALER_PATH
-        self.features = XGBConfig.XGB_FEATURE_PATH
+    def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, scaler_path=XGBConfig.XGB_SCALER_PATH):
+        try:
+            self.model = joblib.load(model_path)
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}")
+            self.model = XGBClassifier(objective='multi:softprob', num_class=3)
 
-    def prepare_features(self,  df: pd.DataFrame, target_column: str):
-        X = df[self.features]
-        y = df[target_column]
-        return X, y
+        try:
+            self.scaler = joblib.load(scaler_path)
+        except Exception as e:
+            print(f"Failed to load scaler from {scaler_path}: {e}")
+            self.scaler = StandardScaler()
 
-    def preprocess(self, X: pd.DataFrame):
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        return X_scaled
-    
-    def train(self, X, y, params=None):
-        if params is None:
-            params = {
-                'objective': 'multi:softprob',
-                'num_class': 3,
-                'eval_metric': 'mlogloss'
-            }
-        self.model = xgb.XGBClassifier(**params)
-        self.model.fit(X, y)
 
-    def predict(self, X):
-        X_scaled = self.scaler.transform(X)
-        prob = self.model.predict_proba(X_scaled)
-        return prob
+    # def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    #     """
+    #     Feature engineering for XGBoost
+    #     """
+    #     df = df.copy()
+    #     df['close_7d_ma'] = df['close'].rolling(7).mean()
+    #     df['close_30d_std'] = df['close'].rolling(30).std()
+    #     df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
 
-    def predict(self, X):
-        X_scaled = self.scaler.transform(X)
-        return self.model.predict_proba(X_scaled)
+    #     if {'exchange_whale_ratio', 'start_time_exchange_whale_ratio'}.issubset(df.columns):
+    #         df['whale_ratio_diff'] = df['exchange_whale_ratio'] - df['start_time_exchange_whale_ratio']
 
-    def save(self, path):
-        joblib.dump((self.model, self.scaler), self.model_path)
+    #     if {'estimated_leverage_ratio', 'start_time_estimated_leverage_ratio'}.issubset(df.columns):
+    #         df['delta_estimated_leverage_ratio'] = df['estimated_leverage_ratio'] - df['start_time_estimated_leverage_ratio']
 
-    def load(self, path):
-        if os.path.exists(self.model_path):
-            self.model, self.scaler = joblib.load(self.model_path)
-        else:
-            raise FileNotFoundError("Saved model not found.")
+    #     features = [
+    #         'delta_estimated_leverage_ratio',
+    #         'whale_ratio_diff',
+    #         'close_7d_ma',
+    #         'close_30d_std',
+    #         'volume_zscore',
+    #         'taker_buy_ratio',
+    #         'open_interest',
+    #         'close',
+    #         'open',
+    #         'high',
+    #         'low',
+    #         'volume'
+    #     ]
+    #     return df[[f for f in features if f in df.columns]].reset_index(drop=True)
 
-    def tune_hyperparameters(self, X, y, param_grid):
-        xgb_model = xgb.XGBClassifier(objective='multi:softprob', num_class=3)
-        grid = GridSearchCV(xgb_model, param_grid, cv=3, verbose=1, n_jobs=-1)
-        grid.fit(X, y)
-        print("Best Params:", grid.best_params_)
-        self.model = grid.best_estimator_
+    def prepare_features(self, df):
+        required_features = [
+            'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
+            'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
+            'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
+            'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
+            'addresses_count_sender', 'addresses_count_active', 'blockreward', 
+            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', 'target'
+        ]
+        
+        # Check for missing features
+        missing_features = [f for f in required_features if f not in df.columns]
+        if missing_features:
+            raise ValueError(f"Missing features: {missing_features}")
+        
+        return df[required_features].dropna().reset_index(drop=True)
 
-    def rolling_train(self, df, target_column: str, windows, thresholds):
-        results = []
-        for window in windows:
-            for buy_thresh in thresholds:
-                for sell_thresh in thresholds:
-                    df_window = df.tail(window)
-                    X, y = self.prepare_features(df_window, target_column)
-                    X_scaled = self.preprocess(X)
-                    self.train(X_scaled, y)
-                    probs = self.predict(X)
-                    signals = self.apply_thresholds(probs, buy_thresh, sell_thresh)
-                    results.append({
-                        'window': window,
-                        'buy_thresh': buy_thresh,
-                        'sell_thresh': sell_thresh,
-                        'signals': signals
-                    })
-        return results
 
-    def apply_thresholds(self, probs, buy_thresh=None, sell_thresh=None):
-        buy_thresh = buy_thresh if buy_thresh is not None else BaseConfig.BUY_THRESHOLD
-        sell_thresh = sell_thresh if sell_thresh is not None else BaseConfig.SELL_THRESHOLD
+    def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize the features using the pre-fitted scaler.
 
+        :param df: DataFrame of features
+        :return: Scaled DataFrame
+        """
+        scaled = self.scaler.transform(df)
+        return pd.DataFrame(scaled, columns=df.columns)
+
+    def predict(self, data: pd.DataFrame) -> np.ndarray:
+        """
+        Predict trading signals from input data using the XGBoost model.
+
+        :param data: Raw input data as a DataFrame
+        :return: Array of trading signals
+        """
+        df_feat = self.prepare_features(data)
+        if df_feat.empty:
+            return np.array([])
+        if not hasattr(self.scaler, 'mean_'):
+            self.scaler.fit(df_feat)
+
+        df_scaled = self.normalize(df_feat)
+
+        probs = self.model.predict_proba(df_scaled)
         signals = []
+
         for p in probs:
-            if p[BaseConfig.BUY_SIGNAL] > buy_thresh and p[BaseConfig.SELL_SIGNAL] <= sell_thresh:
-                signals.append(BaseConfig.BUY_SIGNAL)
-            elif p[BaseConfig.SELL_SIGNAL] > sell_thresh and p[BaseConfig.BUY_SIGNAL] <= buy_thresh:
-                signals.append(BaseConfig.SELL_SIGNAL)
+            if p[2] > BaseConfig.THRESHOLD:
+                signals.append(1)   # Buy
+            elif p[0] > BaseConfig.THRESHOLD:
+                signals.append(-1)  # Sell
             else:
-                signals.append(BaseConfig.HOLD_SIGNAL)
-        return signals
+                signals.append(0)   # Hold
+
+        # Padding for warmup period (if needed)
+        padding = len(data) - len(signals)
+        if padding > 0:
+            signals = [0] * padding + signals
+
+        return np.array(signals)
+    
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.scaler.fit(X)             
+        X_scaled = self.scaler.transform(X)
+        self.model.fit(X_scaled, y)
+
+        
+    
+    '''
+    previous version of model used in prelims
+    '''
 
 # def predict(self, data):
     #     """Full prediction pipeline"""
@@ -159,53 +191,53 @@ class XGBoostModel(BaseModel):
     sample script 
     '''
 
-    if __name__ == "__main__":
-        import sys
-        import warnings
-        warnings.filterwarnings("ignore")
+    # if __name__ == "__main__":
+    #     import sys
+    #     import warnings
+    #     warnings.filterwarnings("ignore")
 
-    # Load the dataset
-    csv_path = Path(__file__).resolve().parents[3] / "experimental" / "datasets" / "btc_data_with_target_modified.csv"
-    if not csv_path.exists():
-        print(f"CSV file not found at {csv_path}")
-        sys.exit(1)
+    # # Load the dataset
+    # csv_path = Path(__file__).resolve().parents[3] / "experimental" / "datasets" / "btc_data_with_target_modified.csv"
+    # if not csv_path.exists():
+    #     print(f"CSV file not found at {csv_path}")
+    #     sys.exit(1)
 
-    df = pd.read_csv(csv_path)
+    # df = pd.read_csv(csv_path)
 
-    # Define config values manually (or mock BaseConfig for testing)
-    class MockBaseConfig:
-        BUY_THRESHOLD = 0.7
-        SELL_THRESHOLD = 0.3
-        BUY_SIGNAL = 1
-        SELL_SIGNAL = -1
-        HOLD_SIGNAL = 0
+    # # Define config values manually (or mock BaseConfig for testing)
+    # class MockBaseConfig:
+    #     BUY_THRESHOLD = 0.7
+    #     SELL_THRESHOLD = 0.3
+    #     BUY_SIGNAL = 1
+    #     SELL_SIGNAL = -1
+    #     HOLD_SIGNAL = 0
 
 
-    # Inject temporary config for testing
-    BaseConfig.BUY_THRESHOLD = MockBaseConfig.BUY_THRESHOLD
-    BaseConfig.SELL_THRESHOLD = MockBaseConfig.SELL_THRESHOLD
-    BaseConfig.BUY_SIGNAL = MockBaseConfig.BUY_SIGNAL
-    BaseConfig.SELL_SIGNAL = MockBaseConfig.SELL_SIGNAL
-    BaseConfig.HOLD_SIGNAL = MockBaseConfig.HOLD_SIGNAL
+    # # Inject temporary config for testing
+    # BaseConfig.BUY_THRESHOLD = MockBaseConfig.BUY_THRESHOLD
+    # BaseConfig.SELL_THRESHOLD = MockBaseConfig.SELL_THRESHOLD
+    # BaseConfig.BUY_SIGNAL = MockBaseConfig.BUY_SIGNAL
+    # BaseConfig.SELL_SIGNAL = MockBaseConfig.SELL_SIGNAL
+    # BaseConfig.HOLD_SIGNAL = MockBaseConfig.HOLD_SIGNAL
 
-    # Define test features and target manually if needed
-    if not hasattr(XGBConfig, 'XGB_FEATURE_PATH') or isinstance(XGBConfig.XGB_FEATURE_PATH, str):
-        # Assuming a column named 'target' exists
-        XGBConfig.XGB_FEATURE_PATH = [col for col in df.columns if col != "target"]
+    # # Define test features and target manually if needed
+    # if not hasattr(XGBConfig, 'XGB_FEATURE_PATH') or isinstance(XGBConfig.XGB_FEATURE_PATH, str):
+    #     # Assuming a column named 'target' exists
+    #     XGBConfig.XGB_FEATURE_PATH = [col for col in df.columns if col != "target"]
 
-    # Initialize model
-    model = XGBoostModel()
+    # # Initialize model
+    # model = XGBoostModel()
 
-    # Run training & prediction test
-    print("Running basic training and prediction test...")
+    # # Run training & prediction test
+    # print("Running basic training and prediction test...")
 
-    # Use a small subset for fast testing
-    df_subset = df.dropna().tail(300)
-    X, y = model.prepare_features(df_subset, "target")
-    X_scaled = model.preprocess(X)
-    model.train(X_scaled, y)
-    probs = model.predict(X)
-    signals = model.apply_thresholds(probs)
+    # # Use a small subset for fast testing
+    # df_subset = df.dropna().tail(300)
+    # X, y = model.prepare_features(df_subset, "target")
+    # X_scaled = model.preprocess(X)
+    # model.train(X_scaled, y)
+    # probs = model.predict(X)
+    # signals = model.apply_thresholds(probs)
 
-    print("Sample predictions (first 10 signals):", signals[:10])
+    # print("Sample predictions (first 10 signals):", signals[:10])
 

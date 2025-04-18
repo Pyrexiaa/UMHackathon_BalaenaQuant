@@ -88,7 +88,7 @@ setup(
         "tensorboard==2.19.0",
         "tensorboard-data-server==0.7.2",
         "tensorflow==2.19.0",
-        "tensorflow-io-gcs-filesystem==0.37.1",
+        "tensorflow-io-gcs-filesystem==0.31.0",
         "termcolor==3.0.1",
         "torch==2.6.0",
         "typing-inspection==0.4.0",
