@@ -1,6 +1,6 @@
 from .base_model import BaseModel
 from .utils import ModelUtils
-from .xgboost.model_train import XGBoostModel
+from .xgboost.model import XGBoostModel
 from .tcn.model import TCNModel
 from .cnn.model import CNNModel
 from .gnn.model import GNNModel

@@ -9,7 +9,7 @@ from quantpilot.config import BaseConfig, XGBConfig
 from quantpilot.models.base_model import BaseModel
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
-from quantpilot.models.xgboost.model import XGBoostModel
+# from quantpilot.models.xgboost.model import XGBoostModel
 
 class XGBoostModel(BaseModel):
     """
@@ -43,7 +43,7 @@ class XGBoostModel(BaseModel):
             'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
             'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
             'addresses_count_sender', 'addresses_count_active', 'blockreward', 
-            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', 'target'
+            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver'
         ]
         
         # Check for missing features

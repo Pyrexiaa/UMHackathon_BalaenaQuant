@@ -10,13 +10,8 @@ if __name__ == "__main__":
     # Run backtest and forward test
     # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
     #                 mode="arithmetic", entry_exit_logic="mean_reversion")
-<<<<<<< HEAD:examples/simple_backtesting.py
-    bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")),
-                mode="arithmetic", entry_exit_logic="trend_following")
-=======
     bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("XGBOOST")),
                 mode="geometric", entry_exit_logic="mean_reversion")
->>>>>>> 3d22e32849074ea14bba02ad3ff96231fcc23149:examples/single_backtesting.py
     bt.run(forward_test=True, forward_start_date="2024-01-01")
   
     bt.plot_results()
