@@ -1,17 +1,22 @@
 FEE_RATE = 0.0006
-SELL_SIGNAL = 2
-BUY_SIGNAL = 0
+SELL_SIGNAL = 0
+BUY_SIGNAL = 2
 HOLD_SIGNAL = 1
 
-WINDOW_SIZE = 4
+WINDOW_SIZE = 48
 BATCH_SIZE = 64
 LR = 0.001
-EPOCHS = 50
+EPOCHS = 30
 WEIGHT_DECAY = 1e-5
 
+RAYTUNE_SAMPLES = 30
+
 # --- Paths ---
-SCALING_PATH = "output/tcn/scaling_values.pkl"
-MODEL_OUTPUT_PATH = "output/tcn/model_output.pth"
-MODEL_OUTPUT_FILE_PATH = "output/tcn/model_output.csv"
-TRADING_OUTPUT_FILE_PATH = "output/tcn/trading_output.csv"
-EVALUATE_PATH = "output/tcn/evaluate_graph.png"
+SCALING_PATH = "scaling_values.pkl"
+MODEL_OUTPUT_PATH = "model_output.pth"
+MODEL_OUTPUT_FILE_PATH = "model_output.csv"
+MODEL_METRICS_PATH = "model_metrics.xlsx"
+MODEL_BEST_CONFIG = "model_config.csv"
+MODEL_CHECKPOINT_PATH = "model_checkpoint"
+TRADING_OUTPUT_FILE_PATH = "trading_output.csv"
+EVALUATE_PATH = "evaluate_graph.png"
