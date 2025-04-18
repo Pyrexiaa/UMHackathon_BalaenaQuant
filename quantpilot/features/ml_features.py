@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from hmmlearn import hmm
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 
 def add_hmm_features(
@@ -12,8 +13,6 @@ def add_hmm_features(
     feature_cols: List[str] = ["close", "volume"], 
     n_components: int = 3,
     n_iter: int = 1000,
-    save_model_path: Optional[str] = None,
-    pretrained_model_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Add HMM-based hidden state features to a DataFrame.
@@ -22,33 +21,72 @@ def add_hmm_features(
     :param feature_cols: Columns to use as input for HMM (e.g., ['close', 'volume']).
     :param n_components: Number of hidden states for the HMM.
     :param n_iter: Number of iterations for HMM fitting.
-    :param save_model_path: Optional path to save the trained HMM model.
-    :param pretrained_model_path: Optional path to load a pretrained HMM model.
     :return: DataFrame with an added 'hmm_state' column.
     """
     df = ori_df.copy()
-
-    if pretrained_model_path:
-        with open(pretrained_model_path, 'rb') as f:
-            hmm_model = pickle.load(f)
-    else:  
-        hmm_model = hmm.GaussianHMM(
-            n_components=n_components,
-            covariance_type="diag", 
-            n_iter=n_iter,
-            random_state=42
-        )
-        hmm_model.fit(df[feature_cols].values)
-
-        if save_model_path:
-            with open(save_model_path, 'wb') as f:
-                pickle.dump(hmm_model, f)
+    hmm_model = hmm.GaussianHMM(
+        n_components=n_components,
+        covariance_type="full", 
+        n_iter=n_iter,
+        random_state=42
+    )
+    scaler = StandardScaler()
+    df[feature_cols] = scaler.fit_transform(df[feature_cols])
+    # Fit the HMM model
+    hmm_model.fit(df[feature_cols].values)
 
     hidden_states = hmm_model.predict(df[feature_cols].values)
     df['hmm_state'] = hidden_states
 
     return df
 
+def add_rolling_kmeans_cluster_feature(df: pd.DataFrame, 
+                                       feature_cols: List[str], 
+                                       cluster_col_name: str = 'kmeans_cluster', 
+                                       n_clusters: int = 3,
+                                       window_size: int = None) -> pd.DataFrame:
+    """
+    Add rolling KMeans cluster label based on selected feature columns.
+
+    Parameters:
+        df : pd.DataFrame
+            Input DataFrame.
+        feature_cols : List[str]
+            Columns used for clustering.
+        cluster_col_name : str
+            Name of the new column to store the cluster label.
+        n_clusters : int
+            Number of clusters for KMeans.
+        window_size : int
+            Rolling window size for fitting KMeans.
+
+    Returns:
+        pd.DataFrame with a new column of rolling cluster labels.
+    """
+    df = df.copy()
+    df[cluster_col_name] = np.nan  # Initialize output column
+    # Standardize the features
+    scaler = StandardScaler()
+    df[feature_cols] = scaler.fit_transform(df[feature_cols])
+
+    if window_size is None:
+        # If no window size is provided, fit KMeans on the entire DataFrame
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        labels = kmeans.fit_predict(df[feature_cols].values)
+        df[cluster_col_name] = labels
+    else:
+        for i in range(window_size, len(df)):
+            window_data = df.iloc[i - window_size:i][feature_cols]
+            if window_data.isnull().values.any():
+                continue  # skip if NaN exists in window
+
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+            labels = kmeans.fit_predict(window_data.values)
+
+            # Assign last point's label to the current row
+            df.at[df.index[i - 1], cluster_col_name] = labels[-1]
+
+    return df
 
 def add_nlp_sentiment_score(
     main_df: pd.DataFrame,
