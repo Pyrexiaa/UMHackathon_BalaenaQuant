@@ -1,17 +1,17 @@
+from sample_data import BTC_DATA
 from quantpilot.strategy import MLStrategy
 import pandas as pd
 from quantpilot.multibacktester import Multibacktester
 from quantpilot.models import get_model
 
-# Load your price data
-price_data = pd.read_csv("data.csv", parse_dates=True, index_col="date")
-
-# Run them together
+# Run multiple strategies together
 bt = Multibacktester(
-    data=price_data,
+    data=BTC_DATA,
     strategies=[MLStrategy(get_model("TCN")), MLStrategy(get_model("XGBOOST"))],
-    strategy_names=["MLStrategy_TCN", "MLStrategy_XGBoost"]
+    strategy_names=["MLStrategy_TCN", "MLStrategy_XGBoost"],
+    mode="geometric", 
+    entry_exit_logic="mean_reversion"
 )
 
-summary = bt.run_all(forward_test=False)
+bt.run_all(forward_test=True, forward_start_date="2024-01-01")
 
