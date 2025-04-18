@@ -356,15 +356,7 @@ class XGBoostTradingModel:
     def prepare_features(self, df):
         potential_features = [
             'exchange_whale_ratio',
-    'start_time_exchange_whale_ratio',
-    'addresses_count_inflow',
-    'addresses_count_outflow',
-    'addresses_count_receiver',
-    'addresses_count_sender',
-    'tokens_transferred_mean',
-    'tokens_transferred_total',
-    'exchange_supply_ratio',
-    'start_time_exchange_supply_ratio',
+    'taker_buy_ratio',
     'target'
         ]
 
@@ -646,11 +638,11 @@ def main():
     
     # Train with proper feature names
     model.features = train_feat.columns.tolist()
-    X_train = train_feat
+    X_train = train_feat.drop(columns=['target'])
     y_train = train_feat["target"]
-    X_val = val_feat
+    X_val = val_feat.drop(columns=['target'])
     y_val = val_feat["target"]
-    X_test = test_feat
+    X_test = test_feat.drop(columns=['target'])
     y_test = test_feat["target"]
     model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
 
