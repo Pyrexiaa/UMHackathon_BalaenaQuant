@@ -123,7 +123,7 @@ class Backtester:
 
         output['results'] = self.results
         self.generate_report()
-        self.export_data(results_path=f'output/Portfolio_{self.strategy_name}.csv', trades_path=f'output/Trade_Log_{self.strategy_name}.csv', records_path=f'output/Records_{self.strategy_name}.csv')
+        self.export_data(results_path=f'output/portfolio_{self.strategy_name}.csv', trades_path=f'output/trade_{self.strategy_name}.csv', records_path=f'output/records_{self.strategy_name}.csv')
 
         return output
 
@@ -409,7 +409,7 @@ class Backtester:
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]
         print(tabulate(info_data + perf_data, tablefmt="plain"))
 
-    def export_data(self, results_path='output/portfolio.csv', trades_path='output/transaction.csv', records_path='output/records.csv'):
+    def export_data(self, results_path='output/portfolio.csv', trades_path='output/trade.csv', records_path='output/records.csv'):
         """
         Export the results and trades to CSV files.
 
