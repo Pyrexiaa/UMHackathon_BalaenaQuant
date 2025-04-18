@@ -53,7 +53,8 @@ ASSUMPTION_6 = [
 ]
 
 ASSUMPTION_7 = [
-    "long_liquidations,short_liquidations",
+    "long_liquidations",
+    "short_liquidations",
     "long_liquidations_usd",
     "short_liquidations_usd",
     "target",

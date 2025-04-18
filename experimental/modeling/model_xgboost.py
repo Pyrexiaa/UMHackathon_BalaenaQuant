@@ -14,6 +14,7 @@ import joblib
 from joblib import dump, load
 import json
 from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
+from .constants import (ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
 
 import sys
 
@@ -25,10 +26,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../q
 # Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest.csv"
-RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
-MODEL_DIR = Path("quantpilot/models_weights/xgboost")
+RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost_assumption_8"
+MODEL_DIR = Path("quantpilot/models_weights/xgboost_assumption_8")
 FEE_RATE = 0.0006
-SCALING_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
+SCALING_PATH = "quantpilot/models_weights/xgboost_assumption_8/scaler.pkl"
 
 # Ensure output directories exist
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -354,13 +355,8 @@ class XGBoostTradingModel:
         )
 
     def prepare_features(self, df):
-        potential_features = [
-            'exchange_whale_ratio',
-    'taker_buy_ratio',
-    'target'
-        ]
 
-        df = df[potential_features].copy()
+        df = df[ASSUMPTION_8].copy()
         df = df.dropna()
         df = df.reset_index(drop=True)
 
@@ -615,7 +611,7 @@ def plot_signals(df, signals):
 
 
 def main():
-    dataset_path = "experimental/datasets/btc_data_with_target_latest.csv"
+    dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
     model = XGBoostTradingModel()
     train , val , test = model.load_csv(dataset_path)
     # train, val, test = model.train_val_test_split(df)
