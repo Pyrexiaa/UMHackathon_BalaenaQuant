@@ -24,7 +24,7 @@ class Backtester:
         """
         self.data = data
         self.strategy = strategy 
-        self.strategy_name = strategy_name or "1"
+        self.strategy_name = strategy_name or "strategy1"
         self.initial_capital = initial_capital
         self.risk_free_rate = risk_free_rate
         self.trading_fee = trading_fee
