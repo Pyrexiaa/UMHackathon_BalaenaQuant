@@ -2,210 +2,156 @@ import pandas as pd
 import joblib
 import numpy as np
 from pathlib import Path
+import json
+from ..base_model import BaseModel
+from ...config import BaseConfig, XGBConfig
 from xgboost import XGBClassifier
-import xgboost as xgb
-import os
-from quantpilot.config import BaseConfig, XGBConfig
-from quantpilot.models.base_model import BaseModel
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-from quantpilot.models.xgboost.model import XGBoostModel
 
 class XGBoostModel(BaseModel):
     """
     XGBoost Model for trading signals.
     """
     
-    def __init__(self):
+    def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, 
+                 scaler_path=XGBConfig.XGB_SCALER_PATH,
+                 feature_path=XGBConfig.XGB_FEATURE_PATH):
+        super().__init__()
         self.model = None
-        self.scaler = None
-        self.model_path = XGBConfig.XGB_MODEL_PATH
-        self.scaler_path = XGBConfig.XGB_SCALER_PATH
-        self.features = XGBConfig.XGB_FEATURE_PATH
-
-    def prepare_features(self,  df: pd.DataFrame, target_column: str):
-        X = df[self.features]
-        y = df[target_column]
-        return X, y
-
-    def preprocess(self, X: pd.DataFrame):
         self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        return X_scaled
+        self.feature_groups = []
+        self.selected_features = []
+        self.class_weights = {0: 5, 1: 1, 2: 5}
+        self.thresholds = {
+            'buy': BaseConfig.BUY_THRESHOLD,
+            'sell': BaseConfig.SELL_THRESHOLD
+        }
+        self.load(model_path)
+
+    def prepare_features(self, df):
+        """Feature engineering pipeline"""
+        df = df.copy()
+        
+        # Technical indicators
+        df['close_7d_ma'] = df['close'].rolling(7).mean()
+        df['close_30d_std'] = df['close'].rolling(30).std()
+        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / \
+                            df['volume'].rolling(30).std()
+
+        # Delta features
+        delta_cols = [c for c in df.columns if c.startswith('start_time_')]
+        for col in delta_cols:
+            base_col = col.replace('start_time_', '')
+            if base_col in df.columns:
+                df[f'delta_{base_col}'] = df[base_col] - df[col]
+
+        # Select features present in all datasets
+        available_features = []
+        for group, features in self.feature_groups.items():
+            group_features = [f for f in features if f in df.columns]
+            available_features.extend(group_features)
+        
+        return df[available_features].dropna()
+
+    def normalize(self, data):
+        """Apply trained scaler"""
+        return self.scaler.transform(data[self.selected_features])
+
+    def preprocess(self, data):
+        """Final preprocessing steps"""
+        # Add any position-aware features here
+        return data
+
+    def predict(self, data):
+        """Full prediction pipeline"""
+        # Feature pipeline
+        feat_df = self.prepare_features(data)
+        norm_df = self.normalize(feat_df)
+        proc_df = self.preprocess(norm_df)
+
+        # Probability prediction
+        probs = self.model.predict_proba(proc_df)
+        
+        # Signal conversion
+        signals = np.ones(len(proc_df), dtype=int)  # Default hold
+        signals[probs[:, 2] > self.thresholds['buy']] = BaseConfig.BUY_SIGNAL
+        signals[probs[:, 0] > self.thresholds['sell']] = BaseConfig.SELL_SIGNAL
+        
+        # Apply hold threshold
+        max_probs = probs.max(axis=1)
+        signals[max_probs < self.thresholds['hold']] = BaseConfig.HOLD_SIGNAL
+        
+        return pd.Series(signals, index=data.index)
+
+    def train(self, train_data, val_data, test_data):
+        """Complete training pipeline"""
+        # Feature selection across all datasets
+        self.selected_features = self._select_features(
+            self.prepare_features(train_data),
+            self.prepare_features(val_data),
+            self.prepare_features(test_data)
+        )
+
+        # Prepare datasets
+        X_train = self.normalize(self.prepare_features(train_data))
+        X_val = self.normalize(self.prepare_features(val_data))
+        y_train = train_data['target']
+        y_val = val_data['target']
+
+        # Initialize model
+
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
+            self.features = json.load(f)
     
-    def train(self, X, y, params=None):
-        if params is None:
-            params = {
-                'objective': 'multi:softprob',
-                'num_class': 3,
-                'eval_metric': 'mlogloss'
-            }
-        self.model = xgb.XGBClassifier(**params)
-        self.model.fit(X, y)
+        self.model = XGBClassifier(
+            objective='multi:softprob',
+            num_class=3
+        )
 
-    def predict(self, X):
-        X_scaled = self.scaler.transform(X)
-        prob = self.model.predict_proba(X_scaled)
-        return prob
+        # Train with class weights
+        self.model.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            sample_weight=self._calculate_weights(y_train),
+            verbose=10
+        )
 
-    def predict(self, X):
-        X_scaled = self.scaler.transform(X)
-        return self.model.predict_proba(X_scaled)
+    def _select_features(self, train, val, test):
+        """Feature selection logic"""
+        selected = []
+        for group, features in self.feature_groups.items():
+            available = [f for f in features 
+                        if all(f in df.columns for df in [train, val, test])]
+            selected.extend(available)
+        return selected
+
+    def _calculate_weights(self, y):
+        """Class weighting"""
+        return np.vectorize(self.class_weights.get)(y)
 
     def save(self, path):
-        joblib.dump((self.model, self.scaler), self.model_path)
+        """Save full model configuration"""
+        path = Path(path)
+        joblib.dump(self.model, path / "model.pkl")
+        joblib.dump(self.scaler, path / "scaler.pkl")
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
+            json.dump({
+                'feature_groups': self.feature_groups,
+                'selected_features': self.selected_features
+            }, f)
 
     def load(self, path):
-        if os.path.exists(self.model_path):
-            self.model, self.scaler = joblib.load(self.model_path)
-        else:
-            raise FileNotFoundError("Saved model not found.")
+        """Load complete model configuration"""
+        path = Path(path)
+        self.model = joblib.load(XGBConfig.XGB_MODEL_PATH)
+        self.scaler = joblib.load(XGBConfig.XGB_SCALER_PATH)
+        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
+            features = json.load(f)
+            self.feature_groups = features
+            self.selected_features = features
 
-    def tune_hyperparameters(self, X, y, param_grid):
-        xgb_model = xgb.XGBClassifier(objective='multi:softprob', num_class=3)
-        grid = GridSearchCV(xgb_model, param_grid, cv=3, verbose=1, n_jobs=-1)
-        grid.fit(X, y)
-        print("Best Params:", grid.best_params_)
-        self.model = grid.best_estimator_
-
-    def rolling_train(self, df, target_column: str, windows, thresholds):
-        results = []
-        for window in windows:
-            for buy_thresh in thresholds:
-                for sell_thresh in thresholds:
-                    df_window = df.tail(window)
-                    X, y = self.prepare_features(df_window, target_column)
-                    X_scaled = self.preprocess(X)
-                    self.train(X_scaled, y)
-                    probs = self.predict(X)
-                    signals = self.apply_thresholds(probs, buy_thresh, sell_thresh)
-                    results.append({
-                        'window': window,
-                        'buy_thresh': buy_thresh,
-                        'sell_thresh': sell_thresh,
-                        'signals': signals
-                    })
-        return results
-
-    def apply_thresholds(self, probs, buy_thresh=None, sell_thresh=None):
-        buy_thresh = buy_thresh if buy_thresh is not None else BaseConfig.BUY_THRESHOLD
-        sell_thresh = sell_thresh if sell_thresh is not None else BaseConfig.SELL_THRESHOLD
-
-        signals = []
-        for p in probs:
-            if p[BaseConfig.BUY_SIGNAL] > buy_thresh and p[BaseConfig.SELL_SIGNAL] <= sell_thresh:
-                signals.append(BaseConfig.BUY_SIGNAL)
-            elif p[BaseConfig.SELL_SIGNAL] > sell_thresh and p[BaseConfig.BUY_SIGNAL] <= buy_thresh:
-                signals.append(BaseConfig.SELL_SIGNAL)
-            else:
-                signals.append(BaseConfig.HOLD_SIGNAL)
-        return signals
-
-# def predict(self, data):
-    #     """Full prediction pipeline"""
-    #     # Feature pipeline
-    #     feat_df = self.prepare_features(data)
-    #     norm_df = self.normalize(feat_df)
-    #     proc_df = self.preprocess(norm_df)
-
-    #     # Probability prediction
-    #     probs = self.model.predict_proba(proc_df)
-        
-    #     # Signal conversion
-    #     signals = np.ones(len(proc_df), dtype=int)  # Default hold
-    #     signals[probs[:, 2] > self.thresholds['buy']] = BaseConfig.BUY_SIGNAL
-    #     signals[probs[:, 0] > self.thresholds['sell']] = BaseConfig.SELL_SIGNAL
-        
-    #     # Apply hold threshold
-    #     max_probs = probs.max(axis=1)
-    #     signals[max_probs < self.thresholds['hold']] = BaseConfig.HOLD_SIGNAL
-        
-    #     return pd.Series(signals, index=data.index)
-
-    # def train(self, train_data, val_data, test_data):
-    #     """Complete training pipeline"""
-    #     # Feature selection across all datasets
-    #     self.selected_features = self._select_features(
-    #         self.prepare_features(train_data),
-    #         self.prepare_features(val_data),
-    #         self.prepare_features(test_data)
-    #     )
-
-    #     # Prepare datasets
-    #     X_train = self.normalize(self.prepare_features(train_data))
-    #     X_val = self.normalize(self.prepare_features(val_data))
-    #     y_train = train_data['target']
-    #     y_val = val_data['target']
-
-    #     # Initialize model
-
-    #     with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
-    #         self.features = json.load(f)
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        return pd.Series(self.model.predict(X), index=X.index)
     
-    #     self.model = XGBClassifier(
-    #         objective='multi:softprob',
-    #         num_class=3
-    #     )
-
-    #     # Train with class weights
-    #     self.model.fit(
-    #         X_train, y_train,
-    #         eval_set=[(X_val, y_val)],
-    #         sample_weight=self._calculate_weights(y_train),
-    #         verbose=10
-    #     )
-
-    '''
-    sample script 
-    '''
-
-    if __name__ == "__main__":
-        import sys
-        import warnings
-        warnings.filterwarnings("ignore")
-
-    # Load the dataset
-    csv_path = Path(__file__).resolve().parents[3] / "experimental" / "datasets" / "btc_data_with_target_modified.csv"
-    if not csv_path.exists():
-        print(f"CSV file not found at {csv_path}")
-        sys.exit(1)
-
-    df = pd.read_csv(csv_path)
-
-    # Define config values manually (or mock BaseConfig for testing)
-    class MockBaseConfig:
-        BUY_THRESHOLD = 0.7
-        SELL_THRESHOLD = 0.3
-        BUY_SIGNAL = 1
-        SELL_SIGNAL = -1
-        HOLD_SIGNAL = 0
-
-
-    # Inject temporary config for testing
-    BaseConfig.BUY_THRESHOLD = MockBaseConfig.BUY_THRESHOLD
-    BaseConfig.SELL_THRESHOLD = MockBaseConfig.SELL_THRESHOLD
-    BaseConfig.BUY_SIGNAL = MockBaseConfig.BUY_SIGNAL
-    BaseConfig.SELL_SIGNAL = MockBaseConfig.SELL_SIGNAL
-    BaseConfig.HOLD_SIGNAL = MockBaseConfig.HOLD_SIGNAL
-
-    # Define test features and target manually if needed
-    if not hasattr(XGBConfig, 'XGB_FEATURE_PATH') or isinstance(XGBConfig.XGB_FEATURE_PATH, str):
-        # Assuming a column named 'target' exists
-        XGBConfig.XGB_FEATURE_PATH = [col for col in df.columns if col != "target"]
-
-    # Initialize model
-    model = XGBoostModel()
-
-    # Run training & prediction test
-    print("Running basic training and prediction test...")
-
-    # Use a small subset for fast testing
-    df_subset = df.dropna().tail(300)
-    X, y = model.prepare_features(df_subset, "target")
-    X_scaled = model.preprocess(X)
-    model.train(X_scaled, y)
-    probs = model.predict(X)
-    signals = model.apply_thresholds(probs)
-
-    print("Sample predictions (first 10 signals):", signals[:10])
-
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.model.fit(X, y)
