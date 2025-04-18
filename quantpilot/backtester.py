@@ -436,7 +436,7 @@ class Backtester:
                 continue
             period_name = "backtest" if period_name == "full" else period_name
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-            fig.suptitle(f'{self.strategy_name.replace('_', ' ')} - {period_name.capitalize()} Result', fontsize=14)
+            fig.suptitle(f"{self.strategy_name.replace('_', ' ')} - {period_name.capitalize()} Result", fontsize=14)
 
             # === Plot 1: Price and Equity ===
             ax1.set_title('Close Price and Equity')
