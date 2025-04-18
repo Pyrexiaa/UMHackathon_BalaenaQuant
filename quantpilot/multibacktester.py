@@ -5,7 +5,7 @@ from .backtester import Backtester
 class Multibacktester:
     def __init__(self, data: pd.DataFrame, strategies: List, strategy_names: Optional[List[str]] = None,
                  initial_capital: float = 100000, risk_free_rate: float = 0.0, trading_fee: float = 0.0006,
-                 qty_per_trade: int = 1):
+                 qty_per_trade: int = 1, mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
         """
         Initialize the strategy tester with multiple strategies.
         
@@ -20,6 +20,8 @@ class Multibacktester:
         self.risk_free_rate = risk_free_rate
         self.trading_fee = trading_fee
         self.qty_per_trade = qty_per_trade
+        self.mode = mode
+        self.entry_exit_logic = entry_exit_logic
 
         if len(self.strategies) != len(self.strategy_names):
             raise ValueError("strategies and strategy_names must have the same length")
@@ -42,7 +44,9 @@ class Multibacktester:
                 initial_capital=self.initial_capital,
                 risk_free_rate=self.risk_free_rate,
                 trading_fee=self.trading_fee,
-                qty_per_trade=self.qty_per_trade
+                qty_per_trade=self.qty_per_trade,
+                mode = self.mode,
+                entry_exit_logic = self.entry_exit_logic
             )
             result = tester.run(
                 forward_test=forward_test,

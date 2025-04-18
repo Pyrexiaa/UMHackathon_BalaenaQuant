@@ -479,11 +479,6 @@ class Backtester:
             self._print_phase_report('forward')
             print("=" * 60)
 
-            print("\n" + "=" * 60)
-            print("COMBINED PERFORMANCE".center(60))
-            print("=" * 60)
-            self._print_phase_report('full')
-            print("=" * 60)
         else:
             # Show single phase
             print("\n" + "=" * 60)
