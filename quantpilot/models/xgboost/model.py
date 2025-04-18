@@ -18,9 +18,14 @@ class XGBoostModel(BaseModel):
     
     def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, scaler_path=XGBConfig.XGB_SCALER_PATH):
         try:
-            self.model = joblib.load(model_path)
+            # Load the full model data (dict)
+            model_data = joblib.load(model_path)
+            # Extract the actual XGBoost model
+            self.model = model_data['model']
+            self.scaler = model_data['scaler']
+            self.features = model_data['features']
         except Exception as e:
-            print(f"Failed to load model from {model_path}: {e}")
+            print(f"Failed to load model: {e}")
             self.model = XGBClassifier(objective='multi:softprob', num_class=3)
 
         try:
@@ -38,12 +43,8 @@ class XGBoostModel(BaseModel):
 
     def prepare_features(self, df):
         required_features = [
-            'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
-            'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
-            'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
-            'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
-            'addresses_count_sender', 'addresses_count_active', 'blockreward', 
-            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver'
+            'exchange_whale_ratio',
+            'taker_buy_ratio'
         ]
         
         # Check for missing features
