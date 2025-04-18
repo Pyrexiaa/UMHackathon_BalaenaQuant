@@ -1,7 +1,7 @@
 # Documentation
 
 ### Getting Started
-* [Quickstart](../README.md#quickstart)
+* [Quickstart](../README.md)
 
 ### Examples
 * [Examples](../examples)

@@ -3,12 +3,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Optional, Tuple
 from tabulate import tabulate
-from datetime import timedelta
+from datetime import datetime
 from .metrics import Metrics
 import warnings
 from .strategy import BaseStrategy
 
 warnings.filterwarnings("ignore")
+
+OUTPUT_DIR = "output"
 
 class Backtester:
     def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'strategy1', initial_capital: float = 100000,
@@ -40,58 +42,82 @@ class Backtester:
         self.mode = mode
         self.entry_exit_logic = entry_exit_logic
         
-        # if output directory does not exist, create it
-        if not os.path.exists("output"):
-            os.makedirs("output")
+        # create output directory if not exits
+        if not os.path.exists(OUTPUT_DIR):
+            os.makedirs(OUTPUT_DIR)
 
     def run(self,
+            backtest_start_date: Optional[str] = None,
+            backtest_end_date: Optional[str] = None,
+            backtest_years: Optional[float] = None,
             forward_test: bool = False,
-            forward_years: Optional[float] = None,
-            forward_start_date: Optional[str] = None) -> pd.DataFrame:
+            forward_start_date: Optional[str] = None,
+            forward_end_date: Optional[str] = None,
+            forward_years: Optional[float] = None) -> pd.DataFrame:
         """
-        Run the backtest with the given strategy.
+        Run the backtest (and optional forward test).
 
-        :param forward_test: Whether to perform forward testing
-        :param forward_years: Years of forward testing if enabled
-        :return: DataFrame with backtest results
+        :param backtest_start_date: Start of backtest period
+        :param backtest_end_date: End of backtest period
+        :param backtest_years: Duration of backtest (used with start or from beginning)
+        :param forward_test: Enable forward testing
+        :param forward_start_date: Start of forward test
+        :param forward_end_date: End of forward test
+        :param forward_years: Duration of forward test (from split date or start)
+        :return: Dictionary with results and metrics
         """
         output = {'results': None, 'metrics': {}}
 
-        if forward_test:
-            if forward_years is not None:
-                split_date = self.data.index[-1] 
-                timedelta(days=forward_years*365)
-            elif forward_start_date is not None:
-                split_date = pd.to_datetime(forward_start_date)
+        def slice_range(data, start=None, end=None, years=None):
+            if start:
+                start = pd.to_datetime(start)
+            if end:
+                end = pd.to_datetime(end)
+                # default to last hour if no specific time given
+                if end.time() == datetime.min.time():
+                    same_day_mask = data.index.normalize() == end.normalize()
+                    if same_day_mask.any():
+                        day_end = data.index[same_day_mask].max()
+                        end = day_end
+
+            if start and end:
+                return data.loc[start:end]
+            elif start and years:
+                return data.loc[start: start + pd.Timedelta(days=int(years * 365))]
+            elif years:
+                start = data.index[0]
+                return data.loc[start: start + pd.Timedelta(days=int(years * 365))]
+            elif start:
+                return data.loc[start:]
+            elif end:
+                return data.loc[:end]
             else:
-                # Default to 1 year forward test if neither specified
-                split_date = self.data.index[-1] - pd.Timedelta(days=365)
+                return data.copy()
+        
+        if forward_test:
+            # Determine forward test start date
+            if forward_start_date:
+                forward_start = pd.to_datetime(forward_start_date)
+            elif forward_years:
+                forward_start = self.data.index[-1] - pd.Timedelta(days=int(forward_years * 365))
+            else:
+                forward_start = self.data.index[-1] - pd.Timedelta(days=365)  # default 1 year
 
-            # Validate split date is within data range
-            if split_date < self.data.index[0]:
-                raise ValueError(
-                    f"Forward start date {split_date} is before backtest start {self.data.index[0]}")
-            if split_date >= self.data.index[-1]:
-                raise ValueError(
-                    f"Forward start date {split_date} is after data end {self.data.index[-1]}")
+            if forward_start < self.data.index[0] or forward_start >= self.data.index[-1]:
+                raise ValueError(f"Forward start date {forward_start} is outside data range.")
 
-            # Split data
-            backtest_data = self.data.loc[:split_date - pd.Timedelta(days=1)]
-            forward_data = self.data.loc[split_date:]
+            backtest_data = self.data.loc[:forward_start - pd.Timedelta(hours=1)]
+            forward_data = slice_range(self.data, forward_start, forward_end_date, forward_years)
 
-            # Run backtest phase
             print("Running backtest phase...")
             backtest_results, backtest_trades, backtest_records = self._run_phase(backtest_data)
 
-            # Run forward test phase
             print("\nRunning forward test phase...")
             forward_results, forward_trades, forward_records = self._run_phase(forward_data)
 
-            # Combine results
             self.results = pd.concat([backtest_results, forward_results])
             self.trades = pd.concat([backtest_trades, forward_trades])
-            self.records = pd.concat([backtest_records, forward_records])
-            
+            self.records = pd.concat([backtest_records, forward_records])    
             self.periods = {
                 'backtest': {
                     'start': backtest_results.index[0],
@@ -116,7 +142,11 @@ class Backtester:
             }
 
         else:
-            self.results, self.trades, self.records = self._run_phase(self.data)
+            # Backtest only
+            backtest_data = slice_range(self.data, backtest_start_date, backtest_end_date, backtest_years)
+            print("Running backtest...")
+            self.results, self.trades, self.records = self._run_phase(backtest_data)
+            
             self.periods = {
                 'full': {
                     'start': self.results.index[0],
@@ -126,14 +156,19 @@ class Backtester:
                     'records': self.records
                 }
             }
+
             output['metrics'] = {
                 'full': self._calculate_metrics(self.results, self.trades, self.records)
             }
-
+            
         output['results'] = self.results
         self.generate_report()
-        self.export_data(results_path=f'output/portfolio_{self.strategy_name}.csv', trades_path=f'output/trade_{self.strategy_name}.csv', records_path=f'output/records_{self.strategy_name}.csv')
-
+        self.export_data(
+            results_path=f'output/portfolio_{self.strategy_name}.csv',
+            trades_path=f'output/trade_{self.strategy_name}.csv',
+            records_path=f'output/records_{self.strategy_name}.csv'
+        )
+        
         return output
 
     def _run_phase(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -390,70 +425,63 @@ class Backtester:
         else:
             return self._calculate_metrics(self.results, self.trades, self.records)
 
-    def plot_results(self, use_streamlit: bool = False):
+    def plot_results(self):
         """Plot backtest results."""
         if self.results is None:
             raise ValueError("No backtest results available. Run backtest first.")
 
+        for period_name, period_data in self.periods.items():
+            results = period_data.get("results")
+            if results is None:
+                continue
+            period_name = "backtest" if period_name == "full" else period_name
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+            fig.suptitle(f'{self.strategy_name.capitalize()} - {period_name.capitalize()} Result', fontsize=14)
 
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+            # === Plot 1: Price and Equity ===
+            ax1.set_title('Close Price and Equity')
+            ax1.set_ylabel("Close Price", color='blue')
+            ax1.plot(results['price'], color='blue', label='Price')
+            ax1.tick_params(axis='y', labelcolor='blue')
 
-        # Equity curve
-        # ax1.plot(self.results['equity'], label='Portfolio Value', color='blue')
-        # ax1.set_ylabel('Portfolio Value ($)')
-        # ax1.set_title('Equity Curve')
-        # ax1.grid(True, linestyle='--', alpha=0.7)
-        # ax1.legend()
-        # Dual-axis Equity + Close Price Plot
-        ax1.set_title('close_price and equity')
-        ax1.set_ylabel("close_price", color='blue')
-        ax1.plot(self.results['price'], color='blue', label='close_price')
-        ax1.tick_params(axis='y', labelcolor='blue')
+            ax1b = ax1.twinx()
+            ax1b.set_ylabel("Equity", color='red')
+            ax1b.plot(results['equity'], color='red', label='Equity')
+            ax1b.tick_params(axis='y', labelcolor='red')
 
-        # Secondary y-axis for equity
-        ax1b = ax1.twinx()
-        ax1b.set_ylabel("equity", color='red')
-        ax1b.plot(self.results['equity'], color='red', label='equity')
-        ax1b.tick_params(axis='y', labelcolor='red')
+            # Combined legend
+            lines_1, labels_1 = ax1.get_legend_handles_labels()
+            lines_2, labels_2 = ax1b.get_legend_handles_labels()
+            ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
+            ax1.grid(True, linestyle='--', alpha=0.7)
 
-        # Combined legend
-        lines_1, labels_1 = ax1.get_legend_handles_labels()
-        lines_2, labels_2 = ax1b.get_legend_handles_labels()
-        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
+            # === Plot 2: Drawdown ===
+            ax2.fill_between(results.index, results['drawdown'], color='red', alpha=0.3)
+            ax2.set_ylabel('Drawdown')
+            ax2.set_title('Portfolio Drawdown')
+            ax2.grid(True, linestyle='--', alpha=0.7)
 
-        ax1.grid(True, linestyle='--', alpha=0.7)
+            # === Plot 3: Trading Signals ===
+            ax3.plot(results['price'], label='Price', color='black', alpha=0.5)
 
+            buy_signals = results[(results['position'] == 1) & (results['trades'] > 0)]
+            sell_signals = results[(results['position'] == -1) & (results['trades'] > 0)]
 
-        # Drawdown
-        ax2.fill_between(self.results.index, self.results['drawdown'], color='red', alpha=0.3)
-        ax2.set_ylabel('Drawdown')
-        ax2.set_title('Portfolio Drawdown')
-        ax2.grid(True, linestyle='--', alpha=0.7)
+            ax3.scatter(buy_signals.index, buy_signals['price'], label='Buy', marker='^', color='green', alpha=1)
+            ax3.scatter(sell_signals.index, sell_signals['price'], label='Sell', marker='v', color='red', alpha=1)
 
-        # Signals and positions
-        ax3.plot(self.results['price'], label='Price', color='black', alpha=0.5)
-        buy_signals = self.results[(self.results['position'] == 1) & (self.results['trades'] > 0)]
-        sell_signals = self.results[(self.results['position'] == -1) & (self.results['trades'] > 0)]
-        ax3.scatter(buy_signals.index, buy_signals['price'],label='Buy', marker='^', color='green', alpha=1)
-        ax3.scatter(sell_signals.index, sell_signals['price'],label='Sell', marker='v', color='red', alpha=1)
-        ax3.set_ylabel('Price ($)')
-        ax3.set_title('Trading Signals')
-        ax3.grid(True, linestyle='--', alpha=0.7)
-        ax3.legend()
+            ax3.set_ylabel('Price ($)')
+            ax3.set_title('Trading Signals')
+            ax3.grid(True, linestyle='--', alpha=0.7)
+            ax3.legend()
 
-        plt.tight_layout()
+            plt.tight_layout(rect=[0, 0, 1, 0.97]) 
 
-        # Save to file
-        output_path = "output/result.png"
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        plt.savefig(output_path)
+            # Save to file
+            output_path = os.path.join(OUTPUT_DIR, f"{self.strategy_name.lower().replace(' ', '_')}_{period_name}_result.png")
+            plt.savefig(output_path)
 
-        if use_streamlit:
-            import streamlit as st
-            st.pyplot(fig)
-        else:
             plt.show()
-
 
     def generate_report(self, phase: str = 'all'):
         """
@@ -461,26 +489,35 @@ class Backtester:
 
         :param phase: 'all', 'backtest', 'forward', or 'full'
         """
-        if not self.periods:
-            raise ValueError(
-                "No backtest results available. Run backtest first.")
+        if not hasattr(self, 'periods') or not self.periods:
+            raise ValueError("No backtest results available. Run backtest first.")
 
-        # Get the appropriate metrics
-        if phase == 'all' and 'backtest' in self.periods:
-            # Show both backtest and forward if available
-            print("\n" + "=" * 60)
-            print("BACKTEST PHASE PERFORMANCE".center(60))
-            print("=" * 60)
-            self._print_phase_report('backtest')
+        if phase == 'all':
+            printed_any = False
+            if 'backtest' in self.periods:
+                print("\n" + "=" * 60)
+                print("BACKTEST PHASE PERFORMANCE".center(60))
+                print("=" * 60)
+                self._print_phase_report('backtest')
+                printed_any = True
 
-            print("\n" + "=" * 60)
-            print("FORWARD TEST PHASE PERFORMANCE".center(60))
-            print("=" * 60)
-            self._print_phase_report('forward')
+            if 'forward' in self.periods:
+                print("\n" + "=" * 60)
+                print("FORWARD TEST PHASE PERFORMANCE".center(60))
+                print("=" * 60)
+                self._print_phase_report('forward')
+                printed_any = True
+
+            if not printed_any and 'full' in self.periods:
+                print("\n" + "=" * 60)
+                print("BACKTEST PHASE PERFORMANCE".center(60))
+                print("=" * 60)
+                self._print_phase_report('full')
             print("=" * 60)
 
         else:
-            # Show single phase
+            if phase not in self.periods:
+                raise ValueError(f"Phase '{phase}' not available in results.")
             print("\n" + "=" * 60)
             print(f"{phase.upper()} PHASE PERFORMANCE".center(60))
             print("=" * 60)
@@ -520,8 +557,8 @@ class Backtester:
 
         # Basic info
         info_data = [
-            ["Start Date", start_date.date()],
-            ["End Date", end_date.date()],
+            ["Start Date", start_date],
+            ["End Date", end_date],
             ["Duration (days)", (end_date - start_date).days],
             ["Data rows", len(results)],
         ]
