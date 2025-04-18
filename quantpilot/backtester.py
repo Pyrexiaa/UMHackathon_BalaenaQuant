@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy, initial_capital: float = 100000,
+    def __init__(self, data: pd.DataFrame, strategy, strategy_name, initial_capital: float = 100000,
                  risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1):
         """
         Initialize the backtester with strategy, data, and configuration.
@@ -23,7 +23,8 @@ class Backtester:
         :param trading_fee: Fee per trade (default 0.06%)
         """
         self.data = data
-        self.strategy = strategy
+        self.strategy = strategy 
+        self.strategy_name = strategy_name or "1"
         self.initial_capital = initial_capital
         self.risk_free_rate = risk_free_rate
         self.trading_fee = trading_fee
@@ -122,6 +123,7 @@ class Backtester:
 
         output['results'] = self.results
         self.generate_report()
+        self.export_data(results_path=f'output/Portfolio_{self.strategy_name}.csv', trades_path=f'output/Trade_Log_{self.strategy_name}.csv', records_path=f'output/Records_{self.strategy_name}.csv')
 
         return output
 
@@ -441,3 +443,4 @@ class Backtester:
 
         metrics_df = pd.DataFrame([self.metrics])  # Convert dict to DataFrame
         metrics_df.to_csv(filepath, index=False)
+    
