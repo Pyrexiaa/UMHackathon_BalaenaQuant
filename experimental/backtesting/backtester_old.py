@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, Optional, Tuple
 from tabulate import tabulate
 from datetime import timedelta
-from .metrics import Metrics
+from ...quantpilot.metrics import Metrics
 
 
 class Backtester:
