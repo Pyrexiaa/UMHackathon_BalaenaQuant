@@ -26,8 +26,16 @@ class Multibacktester:
         if len(self.strategies) != len(self.strategy_names):
             raise ValueError("strategies and strategy_names must have the same length")
 
-    def run_all(self, forward_test: bool = False, forward_years: Optional[float] = None,
-                forward_start_date: Optional[str] = None) -> Dict[str, Dict]:
+    def run_all(self, 
+                backtest_start_date: Optional[str] = None,
+                backtest_end_date: Optional[str] = None,
+                backtest_years: Optional[float] = None,
+                forward_test: bool = False,
+                forward_start_date: Optional[str] = None,
+                forward_end_date: Optional[str] = None,
+                forward_years: Optional[float] = None,
+                show_plot: bool = False
+                ) -> Dict[str, Dict]:
         """
         Run backtests for all strategies and return their results.
         
@@ -37,7 +45,7 @@ class Multibacktester:
 
         for name, strategy in zip(self.strategy_names, self.strategies):
             print(f"\nRunning backtest for: {name}")
-            tester = Backtester(
+            bt = Backtester(
                 data=self.data,
                 strategy=strategy,
                 strategy_name= name,
@@ -48,20 +56,24 @@ class Multibacktester:
                 mode = self.mode,
                 entry_exit_logic = self.entry_exit_logic
             )
-            result = tester.run(
+            result = bt.run(
+                backtest_start_date=backtest_start_date,
+                backtest_end_date=backtest_end_date,
+                backtest_years=backtest_years,
                 forward_test=forward_test,
                 forward_years=forward_years,
-                forward_start_date=forward_start_date
+                forward_start_date=forward_start_date,
+                forward_end_date=forward_end_date
             )
 
+            if show_plot:
+                bt.plot_results()
+
             results_summary[name] = {
-                'backtester': tester,
+                'backtester': bt,
                 'results': result['results'],
                 'metrics': result['metrics'],
             }
-            
-        # for name, result in results_summary.items():
-        #     print(f"\n{name} metrics:")
-        #     print(result['metrics']['full']) 
-    
+                
         return results_summary
+

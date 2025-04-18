@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 OUTPUT_DIR = "output"
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'strategy1', initial_capital: float = 100000,
+    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'Strategy1', initial_capital: float = 100000,
                  risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1,
                  mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
         """
@@ -164,9 +164,9 @@ class Backtester:
         output['results'] = self.results
         self.generate_report()
         self.export_data(
-            results_path=f'output/portfolio_{self.strategy_name}.csv',
-            trades_path=f'output/trade_{self.strategy_name}.csv',
-            records_path=f'output/records_{self.strategy_name}.csv'
+            results_path=f'output/portfolio_{self.strategy_name.lower()}.csv',
+            trades_path=f'output/trade_{self.strategy_name.lower()}.csv',
+            records_path=f'output/records_{self.strategy_name.lower()}.csv'
         )
         
         return output
@@ -435,8 +435,8 @@ class Backtester:
             if results is None:
                 continue
             period_name = "backtest" if period_name == "full" else period_name
-            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
-            fig.suptitle(f'{self.strategy_name.capitalize()} - {period_name.capitalize()} Result', fontsize=14)
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+            fig.suptitle(f'{self.strategy_name.replace('_', ' ')} - {period_name.capitalize()} Result', fontsize=14)
 
             # === Plot 1: Price and Equity ===
             ax1.set_title('Close Price and Equity')
