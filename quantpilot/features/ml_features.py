@@ -67,6 +67,7 @@ def add_nlp_sentiment_score(
     sentiment_df['Date'] = pd.to_datetime(sentiment_df['Date'])
     sentiment_df['Hour'] = sentiment_df['Date'].dt.floor('h')
 
+    # Get the average sentiment for each hour
     hourly_sentiments = sentiment_df.groupby('Hour')['Accurate Sentiments'].mean().reset_index()
     sentiment_dict = dict(zip(hourly_sentiments['Hour'], hourly_sentiments['Accurate Sentiments']))
 
@@ -81,5 +82,10 @@ def add_nlp_sentiment_score(
         if not pd.api.types.is_datetime64_any_dtype(result_df[datetime_col]):
             result_df[datetime_col] = pd.to_datetime(result_df[datetime_col])
         result_df['sentiment'] = result_df[datetime_col].map(sentiment_dict).fillna(0)
+
+    # positive: sentiment score > 0
+    # neutral: sentiment score = 0
+    # negative: sentiment score < 0
+    result_df['sentiment'] = result_df['sentiment'].apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
 
     return result_df
