@@ -29,29 +29,42 @@ class XGBoostModel(BaseModel):
         self.load(model_path)
 
     def prepare_features(self, df):
-        """Feature engineering pipeline"""
-        df = df.copy()
+        """
+        Prepare and engineer features required for model prediction.
+
+        :param df: The raw input DataFrame containing market data
+        :return: DataFrame with engineered features
+        """
         
-        # Technical indicators
+        df = df.copy()
         df['close_7d_ma'] = df['close'].rolling(7).mean()
         df['close_30d_std'] = df['close'].rolling(30).std()
-        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / \
-                            df['volume'].rolling(30).std()
+        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
 
-        # Delta features
-        delta_cols = [c for c in df.columns if c.startswith('start_time_')]
-        for col in delta_cols:
-            base_col = col.replace('start_time_', '')
-            if base_col in df.columns:
-                df[f'delta_{base_col}'] = df[base_col] - df[col]
+        if {'exchange_whale_ratio', 'start_time_exchange_whale_ratio'}.issubset(df.columns):
+            df['whale_ratio_diff'] = df['exchange_whale_ratio'] - df['start_time_exchange_whale_ratio']
 
-        # Select features present in all datasets
-        available_features = []
-        for group, features in self.feature_groups.items():
-            group_features = [f for f in features if f in df.columns]
-            available_features.extend(group_features)
-        
-        return df[available_features].dropna()
+        if {'estimated_leverage_ratio', 'start_time_estimated_leverage_ratio'}.issubset(df.columns):
+            df['delta_estimated_leverage_ratio'] = df['estimated_leverage_ratio'] - df['start_time_estimated_leverage_ratio']
+
+        features = [
+            'delta_estimated_leverage_ratio',
+            'whale_ratio_diff',
+            'close_7d_ma',
+            'close_30d_std',
+            'volume_zscore',
+            'taker_buy_ratio',
+            'open_interest',
+            'close', 
+            'open', 
+            'high', 
+            'low', 
+            'volume'
+        ]
+
+        # Select and clean the relevant columns
+        df = df[[f for f in features if f in df.columns]].reset_index(drop=True)
+        return df
 
     def normalize(self, data):
         """Apply trained scaler"""

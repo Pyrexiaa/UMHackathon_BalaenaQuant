@@ -6,11 +6,12 @@ from tabulate import tabulate
 from datetime import timedelta
 from .metrics import Metrics
 import warnings
+from .strategy import BaseStrategy
 
 warnings.filterwarnings("ignore")
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy, initial_capital: float = 100000,
+    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'strategy1', initial_capital: float = 100000,
                  risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1,
                  mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
         """
@@ -26,7 +27,8 @@ class Backtester:
         :param entry_exit_logic: Entry and exit logic ('trend_following' or 'mean_reversion')
         """
         self.data = data
-        self.strategy = strategy
+        self.strategy = strategy 
+        self.strategy_name = strategy_name
         self.initial_capital = initial_capital
         self.risk_free_rate = risk_free_rate
         self.trading_fee = trading_fee
@@ -130,6 +132,7 @@ class Backtester:
 
         output['results'] = self.results
         self.generate_report()
+        self.export_data(results_path=f'output/portfolio_{self.strategy_name}.csv', trades_path=f'output/trade_{self.strategy_name}.csv', records_path=f'output/records_{self.strategy_name}.csv')
 
         return output
 
@@ -535,7 +538,7 @@ class Backtester:
         perf_data = [[k, fmt_value(k, v)] for k, v in metrics.items()]
         print(tabulate(info_data + perf_data, tablefmt="plain"))
 
-    def export_data(self, results_path='output/portfolio.csv', trades_path='output/transaction.csv', records_path='output/records.csv'):
+    def export_data(self, results_path='output/portfolio.csv', trades_path='output/trade.csv', records_path='output/records.csv'):
         """
         Export the results and trades to CSV files.
 
@@ -569,3 +572,4 @@ class Backtester:
 
         metrics_df = pd.DataFrame([self.metrics])  # Convert dict to DataFrame
         metrics_df.to_csv(filepath, index=False)
+    
