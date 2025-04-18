@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.metrics import classification_report
 import joblib
+from joblib import dump, load
 import json
 
 import sys
@@ -26,6 +27,7 @@ DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_technical
 RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
 MODEL_DIR = Path("quantpilot/models_weights/xgboost")
 FEE_RATE = 0.0006
+SCALING_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
 
 # Ensure output directories exist
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -38,33 +40,26 @@ class XGBoostTradingModel:
         self.features = None
         self.class_weights = {0: 5, 1: 1, 2: 5}
 
-    def load_and_preprocess_data(self):
-        df = pd.read_csv(DATA_PATH, parse_dates=['datetime']).set_index('datetime').sort_index()
+    def load_csv(self,df_path):
+        df = pd.read_csv(df_path)
+        
+        # Keep and parse datetime
+        df["datetime"] = pd.to_datetime(df["datetime"])
+        df["year"] = df["datetime"].dt.year
+        
+        # Drop nan rows
+        # df = df.dropna()
 
-        delta_cols = [c for c in df.columns if c.startswith('start_time_')]
-        for col in delta_cols:
-            base_col = col.replace('start_time_', '')
-            if base_col in df.columns:
-                df[f'delta_{base_col}'] = df[base_col] - df[col]
+        # Split by year
+        df_train = df[df["year"].between(2020, 2022)].copy()
+        df_val = df[df["year"] == 2023].copy()
+        df_test = df[df["year"] >= 2024].copy()
 
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-        df['close_30d_std'] = df['close'].rolling(30).std()
-        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
+        df_train = df_train.drop(columns=["datetime", "year"], axis=1)
+        df_val = df_val.drop(columns=["datetime", "year"], axis=1)
+        df_test = df_test.drop(columns=["datetime", "year"], axis=1)
 
-        if 'target' not in df.columns:
-            fee = FEE_RATE
-            df['future_return'] = df['close'].pct_change().shift(-1)
-            df['target'] = 1
-            df.loc[df['future_return'] > fee, 'target'] = 2
-            df.loc[df['future_return'] < -fee, 'target'] = 0
-
-        if 'target' not in df.columns:
-            raise ValueError("Target column could not be found or created!")
-
-        print("\nTarget value counts:")
-        print(df['target'].value_counts())
-
-        return df.dropna()
+        return df_train, df_val, df_test
 
     def train_val_test_split(self, df):
         return (
@@ -73,68 +68,41 @@ class XGBoostTradingModel:
             df['2024-01-01':'2025-03-31']
         )
 
-    def prepare_features(self, train, val, test):
-        # Categorize features for systematic selection
+    def prepare_features(self,df):
+        potential_features = [
+            'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
+            'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
+            'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
+            'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
+            'addresses_count_sender', 'addresses_count_active', 'blockreward', 
+            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', "target"
+        ]
 
-        feature_groups = {
-            'price_technical': [
-                'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
-                'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
-                'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
-                'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
-                'addresses_count_sender', 'addresses_count_active', 'blockreward', 
-                'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver'
-            ]
-        }
-    
-        
-        # feature_groups = {
-        #     'price_technical': [
-        #         'sma_50', 'sma_200', 'ema_5', 'ema_8', 'ema_13',
-        #         'rsi_14', 'rsi_obv_signal_14', 'macd', 'macd_signal_flag',
-        #         'bb_signal_20', 'volatility_24', 'volatility_72'
-        #     ],
-        #     'on_chain': [
-        #         'estimated_leverage_ratio', 'exchange_whale_ratio',
-        #         'addresses_count_active', 'miner_supply_ratio',
-        #         'taker_buy_ratio', 'long_liquidations_usd'
-        #     ],
-        #     'sentiment_cluster': [
-        #      'kmeans_cluster'
-        #     ],
-        #     'price_action': [
-        #         'close', 'price_change_1', 'volume'
-        #     ]
-        # }
-        
-        # Select features present in all datasets
-        self.features = []
-        for group, features in feature_groups.items():
-            available = [f for f in features 
-                        if all(f in df.columns for df in [train, val, test])]
-            print(f"{group}: {len(available)}/{len(features)} features available")
-            self.features.extend(available)
-        
-        print(f"\nTotal features selected: {len(self.features)}")
-        return self._scale_features(train, val, test)
-    
-    def _scale_features(self, train, val, test):
-        # Convert to DataFrames to preserve feature names
-        X_train = pd.DataFrame(train[self.features], columns=self.features)
-        X_val = pd.DataFrame(val[self.features], columns=self.features)
-        X_test = pd.DataFrame(test[self.features], columns=self.features)
+        df = df[potential_features].copy()
+        df = df.dropna()  # Drop rows with NaN values
+        df = df.reset_index(drop=True)  # Reset index after dropping rows
 
-        # Fit and transform
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_val_scaled = self.scaler.transform(X_val)
-        X_test_scaled = self.scaler.transform(X_test)
-        
-        # Convert back to DataFrames
-        X_train_scaled = pd.DataFrame(X_train_scaled, columns=self.features, index=X_train.index)
-        X_val_scaled = pd.DataFrame(X_val_scaled, columns=self.features, index=X_val.index)
-        X_test_scaled = pd.DataFrame(X_test_scaled, columns=self.features, index=X_test.index)
-        
-        return X_train_scaled, X_val_scaled, X_test_scaled, train['target'], val['target'], test['target']
+        return df
+    
+    def normalize_data(self,df, previous_scaling=None):
+        # Separate features and label
+        features = df.drop(columns=["target"])
+        target = df["target"].reset_index(drop=True)
+
+        if previous_scaling:
+            # Load previously saved scaler
+            scaler = load(previous_scaling)
+            scaled_features = scaler.transform(features)
+        else:
+            scaler = StandardScaler()
+            scaled_features = scaler.fit_transform(features)
+            dump(scaler, SCALING_PATH, compress=True)
+
+        # Combine scaled features and label
+        scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
+        scaled_df["target"] = target
+
+        return scaled_df
     
 
     def get_param_grid(self):
@@ -395,10 +363,31 @@ class XGBoostTradingModel:
 
     def save_model(self):
         joblib.dump(self.model, MODEL_DIR / "xgboost_model.pkl")
-        joblib.dump(self.scaler, MODEL_DIR / "scaler.pkl")
-        with open(MODEL_DIR / "features.json", 'w') as f:
-            json.dump(self.features, f)
+        joblib.dump(self.scaler, MODEL_DIR /"scaler.pkl") 
+        # joblib.dump(self.scaler, MODEL_DIR / "scaler.pkl")
+        # with open(MODEL_DIR / "features.json", 'w') as f:
+        #     json.dump(self.features, f)
 
+    def evaluate_performance(self,equity, trades, set_name="Validation"):
+        """Calculate performance metrics"""
+        returns = np.diff(equity) / equity[:-1]
+        sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
+        max_dd = max((peak - val) / peak for peak, val in zip(np.maximum.accumulate(equity), equity))
+        win_rate = np.mean(np.array(trades) > 0) if trades else 0
+
+        print(f"\n{set_name} Performance:")
+        print(f"Sharpe Ratio: {sharpe:.2f}")
+        print(f"Max Drawdown: {max_dd:.2%}")
+        print(f"Total Trades: {len(trades)}")
+        print(f"Win Rate: {win_rate:.2%}")
+
+        return {
+            'sharpe': sharpe,
+            'max_drawdown': max_dd,
+            'num_trades': len(trades),
+            'win_rate': win_rate
+        }
+        
 
 def plot_signals(df, signals):
     plt.figure(figsize=(14, 6))
@@ -420,34 +409,53 @@ def plot_signals(df, signals):
 
 
 def main():
+    dataset_path = "experimental/datasets/btc_data_with_target_technical_hmm_kmeans.csv"
     model = XGBoostTradingModel()
-    df = model.load_and_preprocess_data()
-    train, val, test = model.train_val_test_split(df)
+    train , val , test = model.load_csv(dataset_path)
+    # train, val, test = model.train_val_test_split(df)
     
     # Prepare features (now returns DataFrames)
-    X_train, X_val, X_test, y_train, y_val, y_test = model.prepare_features(train, val, test)
+    train_feat = model.prepare_features(train)
+    val_feat = model.prepare_features(val)
+    test_feat = model.prepare_features(test)
+
+    # Set the features list for scaling
+    # model.features = train_feat.columns.tolist()
+
+    # Normalize data
+    train_feat = model.normalize_data(train_feat)
+    val_feat = model.normalize_data(val_feat, SCALING_PATH)
+    test_feat = model.normalize_data(test_feat, SCALING_PATH)
+
     
     # Run tuning
     # grid_search = model.tune_hyperparameters(X_train.values, y_train, X_val.values, y_val)
     
     # Train with proper feature names
-    model.train_model(X_train, y_train, X_val, y_val)
-    
+    model.features = train_feat.columns.tolist()
+    X_train = train_feat
+    y_train = train_feat["target"]
+    X_val = val_feat
+    y_val = val_feat["target"]
+    X_test = test_feat
+    y_test = test_feat["target"]
+    model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+
     # Validation set
     signals = model.predict_signals(X_val.values)
     equity, trades, trade_dates = model.backtest(val, signals)
-    val_results = model.evaluate_performance(val, equity, trades, trade_dates, "Validation")
+    val_results = model.evaluate_performance(equity, trades,"Validation")
     
     # Test set
     signals = model.predict_signals(X_test.values)
     equity, trades, trade_dates = model.backtest(test, signals)
-    test_results = model.evaluate_performance(test, equity, trades, trade_dates, "Test")
+    test_results = model.evaluate_performance( equity, trades,"Test")
     
     # Save model
     model.save_model()
 
-    
-    # plot_signals(val, signals)
+     # Evaluate performance
+    model.evaluate_performance(equity, trades,"Test")
 
 if __name__ == "__main__":
     main()
