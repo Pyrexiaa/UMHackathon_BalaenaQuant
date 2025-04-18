@@ -2,169 +2,246 @@ import pandas as pd
 import joblib
 import numpy as np
 from pathlib import Path
-import json
-from ..base_model import BaseModel
-from ...config import BaseConfig, XGBConfig
 from xgboost import XGBClassifier
+import xgboost as xgb
+import os
+from quantpilot.config import BaseConfig, XGBConfig
+from quantpilot.models.base_model import BaseModel
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
+from quantpilot.models.xgboost.model import XGBoostModel
 
 class XGBoostModel(BaseModel):
     """
     XGBoost Model for trading signals.
     """
     
-    def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, 
-                 scaler_path=XGBConfig.XGB_SCALER_PATH,
-                 feature_path=XGBConfig.XGB_FEATURE_PATH):
-        super().__init__()
-        self.model = None
-        self.scaler = StandardScaler()
-        self.feature_groups = []
-        self.selected_features = []
-        self.class_weights = {0: 5, 1: 1, 2: 5}
-        self.thresholds = {
-            'buy': BaseConfig.BUY_THRESHOLD,
-            'sell': BaseConfig.SELL_THRESHOLD
-        }
-        self.load(model_path)
+    def __init__(self, model_path=XGBConfig.XGB_MODEL_PATH, scaler_path=XGBConfig.XGB_SCALER_PATH):
+        try:
+            self.model = joblib.load(model_path)
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}")
+            self.model = XGBClassifier(objective='multi:softprob', num_class=3)
+
+        try:
+            self.scaler = joblib.load(scaler_path)
+        except Exception as e:
+            print(f"Failed to load scaler from {scaler_path}: {e}")
+            self.scaler = StandardScaler()
+
+        # Optimization parameters
+        self.WINDOW_SIZES = [24, 48, 72, 96, 108, 120, 132, 144, 168]
+        self.THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7]
+        self.optimal_window = None
+        self.optimal_buy_thresh = None
+        self.optimal_sell_thresh = None
 
     def prepare_features(self, df):
-        """
-        Prepare and engineer features required for model prediction.
-
-        :param df: The raw input DataFrame containing market data
-        :return: DataFrame with engineered features
-        """
-        
-        df = df.copy()
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-        df['close_30d_std'] = df['close'].rolling(30).std()
-        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
-
-        if {'exchange_whale_ratio', 'start_time_exchange_whale_ratio'}.issubset(df.columns):
-            df['whale_ratio_diff'] = df['exchange_whale_ratio'] - df['start_time_exchange_whale_ratio']
-
-        if {'estimated_leverage_ratio', 'start_time_estimated_leverage_ratio'}.issubset(df.columns):
-            df['delta_estimated_leverage_ratio'] = df['estimated_leverage_ratio'] - df['start_time_estimated_leverage_ratio']
-
-        features = [
-            'delta_estimated_leverage_ratio',
-            'whale_ratio_diff',
-            'close_7d_ma',
-            'close_30d_std',
-            'volume_zscore',
-            'taker_buy_ratio',
-            'open_interest',
-            'close', 
-            'open', 
-            'high', 
-            'low', 
-            'volume'
+        required_features = [
+            'future_return', 'price_change_1', 'ema_5_8_13_cross', 'taker_sell_ratio', 
+            'taker_buy_ratio', 'taker_buy_sell_ratio', 'rsi_14', 'rsi_obv_signal_14', 
+            'bb_signal_20', 'coinbase_premium_index_usdt_adjusted', 'macd_signal_flag', 
+            'coinbase_premium_gap_usdt_adjusted', 'macd_trade_signal', 'macd', 
+            'addresses_count_sender', 'addresses_count_active', 'blockreward', 
+            'tokens_transferred_mean', 'long_liquidations', 'addresses_count_receiver', 'target'
         ]
-
-        # Select and clean the relevant columns
-        df = df[[f for f in features if f in df.columns]].reset_index(drop=True)
-        return df
-
-    def normalize(self, data):
-        """Apply trained scaler"""
-        return self.scaler.transform(data[self.selected_features])
-
-    def preprocess(self, data):
-        """Final preprocessing steps"""
-        # Add any position-aware features here
-        return data
-
-    def predict(self, data):
-        """Full prediction pipeline"""
-        # Feature pipeline
-        feat_df = self.prepare_features(data)
-        norm_df = self.normalize(feat_df)
-        proc_df = self.preprocess(norm_df)
-
-        # Probability prediction
-        probs = self.model.predict_proba(proc_df)
         
-        # Signal conversion
-        signals = np.ones(len(proc_df), dtype=int)  # Default hold
-        signals[probs[:, 2] > self.thresholds['buy']] = BaseConfig.BUY_SIGNAL
-        signals[probs[:, 0] > self.thresholds['sell']] = BaseConfig.SELL_SIGNAL
+        # Check for missing features
+        missing_features = [f for f in required_features if f not in df.columns]
+        if missing_features:
+            raise ValueError(f"Missing features: {missing_features}")
         
-        # Apply hold threshold
-        max_probs = probs.max(axis=1)
-        signals[max_probs < self.thresholds['hold']] = BaseConfig.HOLD_SIGNAL
-        
-        return pd.Series(signals, index=data.index)
+        return df[required_features].dropna().reset_index(drop=True)
 
-    def train(self, train_data, val_data, test_data):
-        """Complete training pipeline"""
-        # Feature selection across all datasets
-        self.selected_features = self._select_features(
-            self.prepare_features(train_data),
-            self.prepare_features(val_data),
-            self.prepare_features(test_data)
-        )
 
-        # Prepare datasets
-        X_train = self.normalize(self.prepare_features(train_data))
-        X_val = self.normalize(self.prepare_features(val_data))
-        y_train = train_data['target']
-        y_val = val_data['target']
+    def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize the features using the pre-fitted scaler.
 
-        # Initialize model
-
-        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
-            self.features = json.load(f)
+        :param df: DataFrame of features
+        :return: Scaled DataFrame
+        """
+        scaled = self.scaler.transform(df)
+        return pd.DataFrame(scaled, columns=df.columns)
     
-        self.model = XGBClassifier(
-            objective='multi:softprob',
-            num_class=3
-        )
+    def optimize_parameters(self, X: pd.DataFrame, y: pd.Series):
+        """
+        Optimize window size and thresholds using walk-forward validation.
+        """
+        best_score = -np.inf
+        best_params = {}
+        
+        # Convert to numpy for faster operations
+        X_scaled = self.scaler.transform(X)
+        y_true = y.values
+        
+        for window_size in self.WINDOW_SIZES:
+            if window_size >= len(X):
+                continue
+                
+            for buy_thresh in self.THRESHOLDS:
+                for sell_thresh in self.THRESHOLDS:
+                    # Walk-forward validation
+                    scores = []
+                    for i in range(window_size, len(X)):
+                        # Get window data
+                        X_window = X_scaled[i-window_size:i]
+                        y_window = y_true[i-window_size:i]
+                        
+                        # Train on window
+                        self.model.fit(X_window, y_window)
+                        
+                        # Predict next step
+                        probs = self.model.predict_proba(X_window[-1:])[0]
+                        
+                        # Apply threshold rules
+                        if probs[0] > buy_thresh and probs[2] <= sell_thresh:
+                            pred = 1  # Buy
+                        elif probs[2] > sell_thresh and probs[0] <= buy_thresh:
+                            pred = -1  # Sell
+                        else:
+                            pred = 0  # Hold
+                            
+                        # Score prediction
+                        scores.append(1 if pred == y_true[i] else 0)
+                    
+                    if scores:
+                        avg_score = np.mean(scores)
+                        if avg_score > best_score:
+                            best_score = avg_score
+                            best_params = {
+                                'window_size': window_size,
+                                'buy_thresh': buy_thresh,
+                                'sell_thresh': sell_thresh
+                            }
+        
+        if best_params:
+            self.optimal_window = best_params['window_size']
+            self.optimal_buy_thresh = best_params['buy_thresh']
+            self.optimal_sell_thresh = best_params['sell_thresh']
+            print(f"Optimized parameters - Window: {self.optimal_window}, Buy Threshold: {self.optimal_buy_thresh}, Sell Threshold: {self.optimal_sell_thresh}")
+        else:
+            # Default values if optimization fails
+            self.optimal_window = 72
+            self.optimal_buy_thresh = 0.5
+            self.optimal_sell_thresh = 0.5
 
-        # Train with class weights
-        self.model.fit(
-            X_train, y_train,
-            eval_set=[(X_val, y_val)],
-            sample_weight=self._calculate_weights(y_train),
-            verbose=10
-        )
+    def predict(self, data: pd.DataFrame) -> np.ndarray:
+        """
+        Predict trading signals from input data using the XGBoost model.
 
-    def _select_features(self, train, val, test):
-        """Feature selection logic"""
-        selected = []
-        for group, features in self.feature_groups.items():
-            available = [f for f in features 
-                        if all(f in df.columns for df in [train, val, test])]
-            selected.extend(available)
-        return selected
+        :param data: Raw input data as a DataFrame
+        :return: Array of trading signals
+        """
+        df_feat = self.prepare_features(data)
+        if df_feat.empty:
+            return np.array([])
+        if not hasattr(self.scaler, 'mean_'):
+            self.scaler.fit(df_feat)
 
-    def _calculate_weights(self, y):
-        """Class weighting"""
-        return np.vectorize(self.class_weights.get)(y)
+        df_scaled = self.normalize(df_feat)
 
-    def save(self, path):
-        """Save full model configuration"""
-        path = Path(path)
-        joblib.dump(self.model, path / "model.pkl")
-        joblib.dump(self.scaler, path / "scaler.pkl")
-        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
-            json.dump({
-                'feature_groups': self.feature_groups,
-                'selected_features': self.selected_features
-            }, f)
+        # If parameters not optimized yet, use default threshold
+        if self.optimal_buy_thresh is None or self.optimal_sell_thresh is None:
+            probs = self.model.predict_proba(df_scaled)
+            signals = []
+            for p in probs:
+                if p[2] > BaseConfig.THRESHOLD:
+                    signals.append(1)   # Buy
+                elif p[0] > BaseConfig.THRESHOLD:
+                    signals.append(-1)  # Sell
+                else:
+                    signals.append(0)   # Hold
+        else:
+            # Use optimized parameters
+            if self.optimal_window is not None and len(df_scaled) > self.optimal_window:
+                # Get the most recent window of data
+                window_data = df_scaled[-self.optimal_window:]
+                # Retrain on the window (optional - could just predict)
+                # self.model.fit(window_data, ...) if we had targets
+                probs = self.model.predict_proba(window_data)
+            else:
+                probs = self.model.predict_proba(df_scaled)
+                
+            signals = []
+            for p in probs:
+                if p[0] > self.optimal_buy_thresh and p[2] <= self.optimal_sell_thresh:
+                    signals.append(1)   # Buy
+                elif p[2] > self.optimal_sell_thresh and p[0] <= self.optimal_buy_thresh:
+                    signals.append(-1)  # Sell
+                else:
+                    signals.append(0)   # Hold
 
-    def load(self, path):
-        """Load complete model configuration"""
-        path = Path(path)
-        self.model = joblib.load(XGBConfig.XGB_MODEL_PATH)
-        self.scaler = joblib.load(XGBConfig.XGB_SCALER_PATH)
-        with open(XGBConfig.XGB_FEATURE_PATH, 'r') as f:
-            features = json.load(f)
-            self.feature_groups = features
-            self.selected_features = features
+        # Padding for warmup period (if needed)
+        padding = len(data) - len(signals)
+        if padding > 0:
+            signals = [0] * padding + signals
 
-    def predict(self, X: pd.DataFrame) -> pd.Series:
-        return pd.Series(self.model.predict(X), index=X.index)
+        return np.array(signals)
     
     def fit(self, X: pd.DataFrame, y: pd.Series):
-        self.model.fit(X, y)
+        """
+        Fit the model and optimize parameters.
+        """
+        self.scaler.fit(X)             
+        X_scaled = self.scaler.transform(X)
+        self.model.fit(X_scaled, y)
+        
+        # Optimize parameters after initial fit
+        self.optimize_parameters(X, y)
+
+
+    '''
+    sample script 
+    '''
+
+    # if __name__ == "__main__":
+    #     import sys
+    #     import warnings
+    #     warnings.filterwarnings("ignore")
+
+    # # Load the dataset
+    # csv_path = Path(__file__).resolve().parents[3] / "experimental" / "datasets" / "btc_data_with_target_modified.csv"
+    # if not csv_path.exists():
+    #     print(f"CSV file not found at {csv_path}")
+    #     sys.exit(1)
+
+    # df = pd.read_csv(csv_path)
+
+    # # Define config values manually (or mock BaseConfig for testing)
+    # class MockBaseConfig:
+    #     BUY_THRESHOLD = 0.7
+    #     SELL_THRESHOLD = 0.3
+    #     BUY_SIGNAL = 1
+    #     SELL_SIGNAL = -1
+    #     HOLD_SIGNAL = 0
+
+
+    # # Inject temporary config for testing
+    # BaseConfig.BUY_THRESHOLD = MockBaseConfig.BUY_THRESHOLD
+    # BaseConfig.SELL_THRESHOLD = MockBaseConfig.SELL_THRESHOLD
+    # BaseConfig.BUY_SIGNAL = MockBaseConfig.BUY_SIGNAL
+    # BaseConfig.SELL_SIGNAL = MockBaseConfig.SELL_SIGNAL
+    # BaseConfig.HOLD_SIGNAL = MockBaseConfig.HOLD_SIGNAL
+
+    # # Define test features and target manually if needed
+    # if not hasattr(XGBConfig, 'XGB_FEATURE_PATH') or isinstance(XGBConfig.XGB_FEATURE_PATH, str):
+    #     # Assuming a column named 'target' exists
+    #     XGBConfig.XGB_FEATURE_PATH = [col for col in df.columns if col != "target"]
+
+    # # Initialize model
+    # model = XGBoostModel()
+
+    # # Run training & prediction test
+    # print("Running basic training and prediction test...")
+
+    # # Use a small subset for fast testing
+    # df_subset = df.dropna().tail(300)
+    # X, y = model.prepare_features(df_subset, "target")
+    # X_scaled = model.preprocess(X)
+    # model.train(X_scaled, y)
+    # probs = model.predict(X)
+    # signals = model.apply_thresholds(probs)
+
+    # print("Sample predictions (first 10 signals):", signals[:10])
+

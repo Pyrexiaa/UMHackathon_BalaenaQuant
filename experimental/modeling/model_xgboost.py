@@ -40,6 +40,170 @@ class XGBoostTradingModel:
         self.features = None
         self.class_weights = {0: 5, 1: 1, 2: 5}
 
+        # Optimization parameters
+        self.WINDOW_SIZES = [24, 48, 72, 96, 108, 120, 132, 144, 168]
+        self.THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7]
+        self.optimal_window = None
+        self.optimal_buy_thresh = 0.6  # Default higher threshold for buys
+        self.optimal_sell_thresh = 0.4  # Default lower threshold for sells
+    
+    def optimize_parameters(self, X: np.ndarray, y: np.ndarray):
+        """
+        Optimize window size and thresholds using walk-forward validation.
+        Called internally during training.
+        """
+        best_score = -np.inf
+        best_params = {}
+        
+        # Convert y to numpy array if it's not already
+        y = np.array(y)
+        
+        # Get unique classes in the full dataset
+        unique_classes = np.unique(y)
+        num_classes = len(unique_classes)
+        
+        # Ensure we have all 3 classes (0, 1, 2)
+        if num_classes != 3:
+            print(f"Warning: Expected 3 classes but found {num_classes}. Using default parameters.")
+            return
+            
+        for window_size in self.WINDOW_SIZES:
+            if window_size >= len(X):
+                continue
+                
+            for buy_thresh in self.THRESHOLDS:
+                for sell_thresh in [t for t in self.THRESHOLDS if t < buy_thresh]:
+                    scores = []
+                    valid_windows = 0
+                    
+                    for i in range(window_size, len(X)):
+                        # Get current window data
+                        X_window = X[i-window_size:i]
+                        y_window = y[i-window_size:i]
+                        
+                        # Check if window has all 3 classes
+                        window_classes = np.unique(y_window)
+                        if len(window_classes) != 3:
+                            continue  # Skip windows missing classes
+                            
+                        valid_windows += 1
+                        
+                        # Clone the base model for this window
+                        window_model = XGBClassifier(
+                            objective='multi:softprob',
+                            num_class=3,
+                            n_estimators=50,  # Smaller for faster training
+                            random_state=42
+                        )
+                        
+                        # Train on window
+                        window_model.fit(X_window, y_window)
+                        
+                        # Predict next step
+                        probs = window_model.predict_proba(X[i-1:i])[0]
+                        
+                        # Apply threshold rules
+                        if probs[0] > buy_thresh and probs[2] <= sell_thresh:
+                            pred = 1  # Buy
+                        elif probs[2] > sell_thresh and probs[0] <= buy_thresh:
+                            pred = -1  # Sell
+                        else:
+                            pred = 0  # Hold
+                            
+                        # Score prediction
+                        scores.append(1 if pred == y[i] else 0)
+                    
+                    if valid_windows > 0 and scores:
+                        avg_score = np.mean(scores)
+                        if avg_score > best_score:
+                            best_score = avg_score
+                            best_params = {
+                                'window_size': window_size,
+                                'buy_thresh': buy_thresh,
+                                'sell_thresh': sell_thresh
+                            }
+                            print(f"New best: Window={window_size}, Buy={buy_thresh}, Sell={sell_thresh}, Score={avg_score:.4f}")
+        
+        if best_params:
+            self.optimal_window = best_params['window_size']
+            self.optimal_buy_thresh = best_params['buy_thresh']
+            self.optimal_sell_thresh = best_params['sell_thresh']
+            print(f"\nOptimized parameters - Window: {self.optimal_window}, Buy Threshold: {self.optimal_buy_thresh}, Sell Threshold: {self.optimal_sell_thresh}")
+        else:
+            print("Warning: Parameter optimization failed. Using defaults.")
+
+    def train_model(self, X_train, y_train, X_val, y_val):
+        # Convert to numpy arrays
+        X_train = np.array(X_train)
+        y_train = np.array(y_train)
+        X_val = np.array(X_val)
+        y_val = np.array(y_val)
+        
+        # Check class distribution
+        unique_classes = np.unique(y_train)
+        if len(unique_classes) != 3:
+            raise ValueError(f"Training data must contain all 3 classes. Found: {unique_classes}")
+    
+        params = {
+            'objective': 'multi:softprob',
+            'num_class': 3,
+            'learning_rate': 0.01,
+            'max_depth': 4,
+            'n_estimators': 50,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'reg_alpha': 0.1,
+            'reg_lambda': 0.5,
+            'min_child_weight': 3,
+            'gamma': 0.1,
+            'eval_metric': ['mlogloss', 'merror'],
+            'early_stopping_rounds': 50
+        }
+        
+        # Class weights
+        class_counts = np.bincount(y_train)
+        weights = len(y_train) / (3 * class_counts)
+        sample_weights = np.array([weights[label] for label in y_train])
+        
+        self.model = XGBClassifier(**params)
+        self.model.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            sample_weight=sample_weights,
+            verbose=10
+        )
+        
+        # Add optimization after initial training
+        print("\nOptimizing trading parameters...")
+        self.optimize_parameters(X_train, y_train)
+
+
+    def predict_signals(self, X):
+        probs = self.model.predict_proba(X)
+        signals = np.ones(len(probs), dtype=int)  # Default: Hold (0)
+        
+        # Apply thresholds (using 0,1,2 internally)
+        signals[probs[:, 2] > self.optimal_buy_thresh] = 2    # Buy
+        signals[probs[:, 0] > self.optimal_sell_thresh] = 0   # Sell
+        
+        # Convert to -1, 0, 1 for external use (optional)
+        signals = signals - 1  # 0→-1, 1→0, 2→1
+        
+        return signals
+    
+    def save_model(self):
+        """Save model with optimization parameters"""
+        model_data = {
+            'model': self.model,
+            'scaler': self.scaler,
+            'optimal_window': self.optimal_window,
+            'optimal_buy_thresh': self.optimal_buy_thresh,
+            'optimal_sell_thresh': self.optimal_sell_thresh,
+            'features': self.features
+        }
+        joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")    
+        print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
+        
     def load_csv(self,df_path):
         df = pd.read_csv(df_path)
         
@@ -165,40 +329,6 @@ class XGBoostTradingModel:
         print(f"Best validation score: {grid_search.best_score_:.4f}")
         
         return grid_search
-
-    def predict_signals(self, X, buy_thresh=0.3, sell_thresh=0.3, hold_thresh=0.4):
-        """
-        Predicts trading signals based on model probabilities.
-        Arguments:
-            X: Features for prediction.
-            buy_thresh: Probability threshold for 'Buy'.
-            sell_thresh: Probability threshold for 'Sell'.
-            hold_thresh: Probability threshold for 'Hold'        
-        Returns:
-            signals: List of predicted signals as 0 (Sell), 1 (Hold), or 2 (Buy).
-        """
-        # Make probability predictions using the trained model
-        probs = self.model.predict_proba(X)
-        
-        # Initialize signals as 1 (Hold) by default
-        signals = np.ones(len(probs), dtype=int)  # 1 represents 'Hold'
-
-        # For Buy (class 2), check if the probability surpasses the buy_thresh
-        signals[probs[:, 2] > buy_thresh] = 2  # 2 represents 'Buy'
-
-        # For Sell (class 0), check if the probability surpasses the sell_thresh
-        signals[probs[:, 0] > sell_thresh] = 0  # 0 represents 'Sell'
-
-        # Ensure that the signals are based on the highest probability class for each row
-        signal_class = probs.argmax(axis=1)
-        
-        for i in range(len(signals)):
-            if probs[i, signal_class[i]] >= hold_thresh:
-                signals[i] = signal_class[i]  # Keep 0 for Sell, 1 for Hold, 2 for Buy
-        
-        return signals
-
-
     
     def analyze_clusters(self, df, predictions, cluster_column='kmeans_cluster'):
         """
@@ -324,49 +454,6 @@ class XGBoostTradingModel:
             'trade_frequency': trade_frequency,
             'passed': passed
         }
-
-    def train_model(self, X_train, y_train, X_val, y_val):
-        # Ensure DataFrames
-        if not isinstance(X_train, pd.DataFrame):
-            X_train = pd.DataFrame(X_train, columns=self.features)
-        if not isinstance(X_val, pd.DataFrame):
-            X_val = pd.DataFrame(X_val, columns=self.features)
-        
-        params = {
-            'objective': 'multi:softprob',
-            'num_class': 3,
-            'learning_rate': 0.01,
-            'max_depth': 4,
-            'n_estimators': 50,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'reg_alpha': 0.1,
-            'reg_lambda': 0.5,
-            'min_child_weight': 3,
-            'gamma': 0.1,
-            'eval_metric': ['mlogloss', 'merror'],
-            'early_stopping_rounds': 50
-        }
-        
-        # Class weights
-        class_counts = np.bincount(y_train)
-        weights = len(y_train) / (3 * class_counts)
-        sample_weights = np.array([weights[label] for label in y_train])
-        
-        self.model = XGBClassifier(**params)
-        self.model.fit(
-            X_train, y_train,
-            eval_set=[(X_val, y_val)],
-            sample_weight=sample_weights,
-            verbose=10
-        )
-
-    def save_model(self):
-        joblib.dump(self.model, MODEL_DIR / "xgboost_model.pkl")
-        joblib.dump(self.scaler, MODEL_DIR /"scaler.pkl") 
-        # joblib.dump(self.scaler, MODEL_DIR / "scaler.pkl")
-        # with open(MODEL_DIR / "features.json", 'w') as f:
-        #     json.dump(self.features, f)
 
     def evaluate_performance(self,equity, trades, set_name="Validation"):
         """Calculate performance metrics"""
