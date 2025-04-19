@@ -1,6 +1,6 @@
 from sample_data import BTC_DATA
 from quantpilot.backtester import Backtester
-from quantpilot.strategy import MLStrategy, BaseStrategy
+from quantpilot.strategy import MLStrategy, BaseStrategy, HMMStrategy, CombinedStrategy
 from quantpilot.models import get_model
 from quantpilot.visualization import run_dashboard
 import pandas as pd
@@ -9,7 +9,17 @@ if __name__ == "__main__":
     
     bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")), strategy_name="XGBoost",
                     mode="geometric", entry_exit_logic="mean_reversion")
-    # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
+    # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")), strategy_name="XGBoost",
+    #             mode="geometric", entry_exit_logic="mean_reversion")
+    # bt = Backtester(data=BTC_DATA, strategy=HMMStrategy(), strategy_name="HMM",
+    #             mode="arithmetic", entry_exit_logic="mean_reversion")
+    # bt = Backtester(data=BTC_DATA, 
+    #                 strategy=CombinedStrategy(hmm_strategy=HMMStrategy(), 
+    #                                         #   ml_strategy=MLStrategy(get_model("tcn")),
+    #                                             ml_strategy=MLStrategy(get_model("xgboost")),
+    #                                           method="and"
+    #                                           ), 
+    #                 strategy_name="Combined",
     #             mode="geometric", entry_exit_logic="mean_reversion")
     
     # bt.run(backtest_end_date="2023-12-31") # Run backtest only
