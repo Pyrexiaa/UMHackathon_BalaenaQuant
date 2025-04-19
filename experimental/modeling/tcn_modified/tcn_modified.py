@@ -48,7 +48,7 @@ MODELING_DIR = os.path.dirname(TCN_DIR)
 BASE_DIR = os.path.dirname(MODELING_DIR)
 
 # --- Read from env if available ---
-WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 30))
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 120))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn_modified", "ASSUMPTION_9", str(WINDOW_SIZE))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

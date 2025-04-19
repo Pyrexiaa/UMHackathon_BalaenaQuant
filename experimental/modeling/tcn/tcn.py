@@ -33,14 +33,7 @@ from joblib import dump, load
 from .datasets import TimeSeriesDataset
 from torch.utils.data import DataLoader
 from ..constants import (
-    ASSUMPTION_1,
-    ASSUMPTION_2,
-    ASSUMPTION_3,
-    ASSUMPTION_4,
-    ASSUMPTION_5,
-    ASSUMPTION_6,
-    ASSUMPTION_7,
-    ASSUMPTION_8,
+    ASSUMPTION_9,
 )
 
 from ray import tune, train
@@ -54,22 +47,10 @@ TCN_DIR = os.path.dirname(CURRENT_DIR)
 MODELING_DIR = os.path.dirname(TCN_DIR)
 BASE_DIR = os.path.dirname(MODELING_DIR)
 
-assumption_map = {
-    "ASSUMPTION_1": ASSUMPTION_1,
-    "ASSUMPTION_2": ASSUMPTION_2,
-    "ASSUMPTION_3": ASSUMPTION_3,
-    "ASSUMPTION_4": ASSUMPTION_4,
-    "ASSUMPTION_5": ASSUMPTION_5,
-    "ASSUMPTION_6": ASSUMPTION_6,
-    "ASSUMPTION_7": ASSUMPTION_7,
-    "ASSUMPTION_8": ASSUMPTION_8,
-}
 
 # --- Read from env if available ---
-WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 48))
-ASSUMPTION_NAME = os.getenv("ASSUMPTION", "ASSUMPTION_7")
-ASSUMPTION = assumption_map[ASSUMPTION_NAME]
-OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", ASSUMPTION_NAME, str(WINDOW_SIZE))
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 120))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", "ASSUMPTION_9", str(WINDOW_SIZE))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Define search space for hyperparameters
@@ -100,7 +81,7 @@ def optimizer_creator(model, trial):
 
 
 def prepare_features(df):
-    df = df[ASSUMPTION].copy()
+    df = df[ASSUMPTION_9].copy()
     df = df.dropna()  # Drop rows with NaN values
     df = df.reset_index(drop=True)  # Reset index after dropping rows
 
