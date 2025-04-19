@@ -191,7 +191,7 @@ class Backtester:
         periods_metadata["metrics"] = output["metrics"]
 
 
-        with open(f'output/meta_{self.strategy_name.lower()}.json', 'a') as f:
+        with open(f'output/meta_{self.strategy_name.lower()}.json', 'w') as f:
             json.dump(self.convert_json_friendly(periods_metadata), f, indent=4)
 
         

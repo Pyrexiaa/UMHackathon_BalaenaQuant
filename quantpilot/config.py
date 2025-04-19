@@ -10,6 +10,10 @@ class TCNConfig:
     # TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
     TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
 
+class TabNetConfig:
+    TABNET_MODEL_PATH = "quantpilot/models_weights/tabnet/tabnet_fold1.zip"
+    TABNET_SCALER_PATH = "quantpilot/models_weights/tabnet/scaler.pkl"
+    
 
 class XGBConfig:
     XGB_MODEL_PATH = "quantpilot/models_weights/xgboost2/xgboost_model.pkl"
@@ -50,8 +54,3 @@ class GNNConfig:
     GNN_MODEL_PATH = "quantpilot/models_weights/gnn/checkpoint.pt"
     GNN_SCALER_PATH = "quantpilot/models_weights/gnn/scaling_values.pkl"
 
-
-class TabNetConfig:
-    TABNET_MODEL_PATH = "quantpilot/models_weights/tabnet/model.zip"
-    TABNET_SCALER_PATH = "quantpilot/models_weights/tabnet/scaler.pkl"
-    TABNET_FEATURE_NAMES_PATH = "quantpilot/models_weights/xgboost/features.json"
