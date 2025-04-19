@@ -444,6 +444,7 @@ class Backtester:
             equity=results['equity'],
             drawdown=results['drawdown'],
             returns=results['pnl'],
+            mode=self.mode,
             trades=trades,
             records=records,
             risk_free_rate=self.risk_free_rate,
