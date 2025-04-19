@@ -13,20 +13,21 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.metrics import classification_report
 import joblib
-from joblib import dump, load
-import json
-from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
-from .constants import (ASSUMPTION_1,ASSUMPTION_2,ASSUMPTION_3,ASSUMPTION_4,ASSUMPTION_5,ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8,ASSUMPTION_9)
-from sklearn.model_selection import TimeSeriesSplit
+from joblib import dump
 from sklearn.metrics import (
     balanced_accuracy_score,
     precision_score,
     recall_score,
     f1_score,
 )
+from .constants import ALL_ON_CHAIN_FEATURES
 from scipy.stats import f_oneway
+from itertools import combinations
+from .utils import interpret_cohens_d
+import matplotlib.patches as patches
 
 import sys
+
 
 # Add the path to your 'quantpilot' folder dynamically
 sys.path.append(
@@ -48,24 +49,23 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 class XGBoostTradingModel:
     def __init__(self):
-
         self.ASSUMPTION_9 = [
-    'exchange_whale_ratio',
-    'taker_buy_ratio',
-    'coinbase_premium_gap',
-    'coinbase_premium_index',
-    'exchange_supply_ratio',
-    'miner_supply_ratio',
-    'addresses_count_active',
-    'addresses_count_outflow',
-    'transactions_count_outflow',
-    'tokens_transferred_total',
-    'short_liquidations',
-    'short_liquidations_usd',
-    'long_liquidations',
-    'long_liquidations_usd',
-    'target'
-]
+            "exchange_whale_ratio",
+            "taker_buy_ratio",
+            "coinbase_premium_gap",
+            "coinbase_premium_index",
+            "exchange_supply_ratio",
+            "miner_supply_ratio",
+            "addresses_count_active",
+            "addresses_count_outflow",
+            "transactions_count_outflow",
+            "tokens_transferred_total",
+            "short_liquidations",
+            "short_liquidations_usd",
+            "long_liquidations",
+            "long_liquidations_usd",
+            "target",
+        ]
         self.model = None
         self.scaler = StandardScaler()
         self.features = None
@@ -85,7 +85,7 @@ class XGBoostTradingModel:
         """
         window_size = 120
         threshold = 0.3
-        
+
         if len(X) < window_size:
             print(f"Error: Data too short for window size {window_size}.")
             return
@@ -93,16 +93,16 @@ class XGBoostTradingModel:
         signals, true_labels = [], []
 
         for i in range(window_size, len(X)):
-            X_window = X[i-window_size:i]
-            y_window = y[i-window_size:i]
+            X_window = X[i - window_size : i]
+            y_window = y[i - window_size : i]
 
             # Skip if window lacks all classes
             if len(np.unique(y_window)) != 3:
                 continue
 
             # Predict using the pre-trained model
-            p = self.model.predict_proba(X[i:i+1])[0]  # Shape: (3,)
-            
+            p = self.model.predict_proba(X[i : i + 1])[0]  # Shape: (3,)
+
             # Generate signal
             if p[2] > threshold and p[0] <= threshold:
                 signal = 2  # Buy
@@ -110,7 +110,7 @@ class XGBoostTradingModel:
                 signal = 0  # Sell
             else:
                 signal = 1  # Hold
-            
+
             signals.append(signal)
             true_labels.append(y[i])
 
@@ -123,7 +123,9 @@ class XGBoostTradingModel:
         print("\n=== Rolling Window Test (Pre-Trained Model) ===")
         print(f"Window Size: {window_size} | Threshold: {threshold}")
         print(f"Accuracy: {accuracy:.4f}")
-        print(f"Signals: Buy={sum(np.array(signals) == 2)}, Sell={sum(np.array(signals) == 0)}, Hold={sum(np.array(signals) == 1)}")
+        print(
+            f"Signals: Buy={sum(np.array(signals) == 2)}, Sell={sum(np.array(signals) == 0)}, Hold={sum(np.array(signals) == 1)}"
+        )
 
     def train_model(self, X_train, y_train, X_val, y_val):
         # Convert to numpy arrays
@@ -168,7 +170,7 @@ class XGBoostTradingModel:
             sample_weight=sample_weights,
             verbose=10,
         )
-        
+
         # After training, validate rolling-window performance
         print("\n=== Validation Set Rolling-Window Test ===")
         self.optimize_parameters(X_val, y_val)  # Now uses pre-trained model
@@ -177,38 +179,36 @@ class XGBoostTradingModel:
         """
         Converts model probabilities to trading signals (-1, 0, 1).
         Uses strict threshold checks to avoid conflicting signals.
-        
+
         Args:
             X: Input features (n_samples, n_features)
-        
+
         Returns:
             np.ndarray: Trading signals (-1=Sell, 0=Hold, 1=Buy)
         """
         # Get class probabilities (shape: [n_samples, 3])
         probs = self.model.predict_proba(X)
-        
+
         # Initialize with Hold (0) - using -1,0,1 convention from start
         signals = np.zeros(len(probs), dtype=int)
-        
-        # Strict Buy condition: 
+
+        # Strict Buy condition:
         # - Buy prob > threshold AND Sell prob not elevated
-        buy_mask = (
-            (probs[:, 2] > self.optimal_buy_thresh) & 
-            (probs[:, 0] <= self.optimal_sell_thresh)
+        buy_mask = (probs[:, 2] > self.optimal_buy_thresh) & (
+            probs[:, 0] <= self.optimal_sell_thresh
         )
         signals[buy_mask] = 1  # Buy
-        
+
         # Strict Sell condition:
         # - Sell prob > threshold AND Buy prob not elevated
-        sell_mask = (
-            (probs[:, 0] > self.optimal_sell_thresh) & 
-            (probs[:, 2] <= self.optimal_buy_thresh)
+        sell_mask = (probs[:, 0] > self.optimal_sell_thresh) & (
+            probs[:, 2] <= self.optimal_buy_thresh
         )
         signals[sell_mask] = -1  # Sell
-        
+
         # All other cases remain Hold (0)
         return signals
-    
+
     def save_model(self):
         """Save model with optimization parameters"""
         model_data = {
@@ -289,7 +289,7 @@ class XGBoostTradingModel:
 
         os.makedirs(plot_dir, exist_ok=True)
 
-        features = [f for f in self.ASSUMPTION_9 if f in df.columns]
+        features = [f for f in ALL_ON_CHAIN_FEATURES if f in df.columns]
         anova_results = {}
 
         # Store results for each (feature, window) combination
@@ -363,20 +363,109 @@ class XGBoostTradingModel:
         )
         plt.close()
 
-        # Generate original boxplots only for non-rolling version
+        single_row_anova_results = []
         for feature in features:
             if feature not in df.columns:
                 continue
 
-            groups = []
-            for target_value in sorted(df["target"].dropna().unique()):
-                groups.append(df[df["target"] == target_value][feature].dropna())
+            target_values = sorted(df["target"].dropna().unique())
+            groups = [df[df["target"] == tv][feature].dropna() for tv in target_values]
 
             if len(groups) > 1:
                 f_val, p_val = f_oneway(*groups)
+                single_row_anova_results.append(
+                    {"feature": feature, "f_value": f_val, "p_value": p_val}
+                )
 
                 plt.figure(figsize=(10, 6))
-                sns.boxplot(x="target", y=feature, data=df)
+                ax = sns.boxplot(x="target", y=feature, data=df)
+
+                text_bbox_props = dict(facecolor='lightgray', alpha=0.7, edgecolor='none', boxstyle='round')
+
+
+                # Calculate and display percentage difference and Cohen's d
+                n_groups = len(groups)
+                if n_groups == 2:
+                    mean_group0 = np.mean(groups[0])
+                    mean_group1 = np.mean(groups[1])
+                    percentage_difference = (
+                        ((mean_group1 - mean_group0) / mean_group0) * 100
+                        if mean_group0 != 0
+                        else np.inf
+                    )
+                    cohen_d = (mean_group1 - mean_group0) / np.sqrt(
+                        (
+                            np.std(groups[0], ddof=1) ** 2
+                            + np.std(groups[1], ddof=1) ** 2
+                        )
+                        / 2
+                    )
+
+                    ax.text(
+                        0.5,
+                        0.95,
+                        f"Percentage Difference: {abs(percentage_difference):.2f}%",
+                        transform=ax.transAxes,
+                        ha="center",
+                        bbox=text_bbox_props,
+                    )
+                    ax.text(
+                        0.5,
+                        0.90,
+                        f"Cohen's d: {abs(cohen_d):.2f}",
+                        transform=ax.transAxes,
+                        ha="center",
+                        bbox=text_bbox_props,
+                    )
+                elif n_groups > 2:
+                    pairwise_percentage_differences = []
+                    pairwise_cohens_d = []
+
+                    for (i, group_i), (j, group_j) in combinations(
+                        enumerate(groups), 2
+                    ):
+                        mean_i = np.mean(group_i)
+                        mean_j = np.mean(group_j)
+                        percentage_difference = (
+                            ((mean_j - mean_i) / mean_i) * 100
+                            if mean_i != 0
+                            else np.inf
+                        )
+                        cohen_d = (mean_j - mean_i) / np.sqrt(
+                            (
+                                np.std(group_i, ddof=1) ** 2
+                                + np.std(group_j, ddof=1) ** 2
+                            )
+                            / 2
+                        )
+
+                        pairwise_percentage_differences.append(percentage_difference)
+                        pairwise_cohens_d.append(cohen_d)
+
+                    avg_percentage_difference = (
+                        np.mean(pairwise_percentage_differences)
+                        if pairwise_percentage_differences
+                        else 0
+                    )
+                    avg_cohen_d = np.mean(pairwise_cohens_d) if pairwise_cohens_d else 0
+                    cohen_d_interpretation = interpret_cohens_d(avg_cohen_d)
+
+                    ax.text(
+                        0.5,
+                        0.95,
+                        f"Avg. Percentage Difference: {abs(avg_percentage_difference):.2f}%",
+                        transform=ax.transAxes,
+                        ha="center",
+                        bbox=text_bbox_props,
+                    )
+                    ax.text(
+                        0.5,
+                        0.90,
+                        f"Avg. Cohen's d: {abs(avg_cohen_d):.2f} {cohen_d_interpretation}",
+                        transform=ax.transAxes,
+                        ha="center",
+                        bbox=text_bbox_props,
+                    )
 
                 if p_val < 0.0001:
                     p_text = f"ANOVA p-value: {p_val:.2e}"
@@ -390,7 +479,7 @@ class XGBoostTradingModel:
                 plot_filename = os.path.join(plot_dir, f"{feature}_boxplot.png")
                 plt.savefig(plot_filename, bbox_inches="tight", dpi=300)
                 plt.close()
-
+                
         return anova_df
 
     def select_best_common_window(self, df, feature_list):
@@ -484,7 +573,6 @@ class XGBoostTradingModel:
         print(f"Best validation score: {grid_search.best_score_:.4f}")
 
         return grid_search
-    
 
 
 # def main():
@@ -561,15 +649,9 @@ def main():
     # Initialize model and load data
     model = XGBoostTradingModel()
     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
+    
     print("\nLoading data...")
     train_df, test_df = model.load_csv(dataset_path)
-
-    # Save plots to "plots/" folder
-    anova_results = model.prepare_features(train_df, plot_dir="plots")
-
-    print("\nANOVA Results (sorted by p-value):")
-    print(anova_results)
-    anova_results.to_csv("anova_results.csv")
     
     # Debug: Check columns
     print("\nColumns in train_df:", train_df.columns.tolist())
@@ -579,6 +661,7 @@ def main():
     print("\nNormalizing data...")
     train_normalized = model.normalize_data(train_df)
     test_normalized = model.normalize_data(test_df, SCALING_PATH)
+    
     # Split into features/target
     X_train = train_normalized.drop(columns=["target"])
     y_train = train_normalized["target"]
@@ -613,11 +696,12 @@ def main():
     print(f"Validation Balanced Accuracy: {val_metrics['balanced_accuracy']:.4f}")
     print(f"Test Balanced Accuracy: {test_metrics['balanced_accuracy']:.4f}") 
 
+
 if __name__ == "__main__":
     main()
 
 
-'''for features anova test use'''
+"""for features anova test use"""
 # def main():
 #     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
 #     model = XGBoostTradingModel()
@@ -629,4 +713,3 @@ if __name__ == "__main__":
 #     print("\nANOVA Results (sorted by p-value):")
 #     print(anova_results)
 #     anova_results.to_csv("anova_results.csv")
-

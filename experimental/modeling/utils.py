@@ -401,3 +401,14 @@ def plot_results(df, signals, output_dir):
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, EVALUATE_PATH))
     plt.close()
+
+def interpret_cohens_d(d):
+    """Interprets Cohen's d effect size."""
+    if abs(d) < 0.2:
+        return "(insignificant)"
+    elif abs(d) < 0.5:
+        return "(small)"
+    elif abs(d) < 0.8:
+        return "(moderate)"
+    else:
+        return "(large)"
