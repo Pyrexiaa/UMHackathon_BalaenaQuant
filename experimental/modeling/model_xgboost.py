@@ -4,6 +4,9 @@ XGBoost Trading Strategy Implementation
 import os
 from pathlib import Path
 import pandas as pd
+from scipy.stats import ttest_ind
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
@@ -14,7 +17,8 @@ import joblib
 from joblib import dump, load
 import json
 from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
-from .constants import (ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
+from tabulate import tabulate
+from .constants import (ASSUMPTION_1,ASSUMPTION_2,ASSUMPTION_3,ASSUMPTION_4,ASSUMPTION_5,ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
 
 import sys
 
@@ -157,7 +161,7 @@ class XGBoostTradingModel:
             return
         
         # Set window size to 48 and threshold to 0.3
-        window_size = 48
+        window_size = 168
         if window_size >= len(X):
             print("Window size too large for data. Using defaults.")
             return
@@ -170,8 +174,8 @@ class XGBoostTradingModel:
         print(f"Total windows to process: {total_windows}")
 
         # Use threshold values of 0.3 for both buy and sell
-        buy_thresh = 0.3
-        sell_thresh = 0.3
+        buy_thresh = 0.4
+        sell_thresh = 0.6
 
         # Iterate over each window individually
         for i in range(window_size, min(len(X), window_size + 100)):  # Limit to 100 windows for testing
@@ -236,8 +240,8 @@ class XGBoostTradingModel:
             'objective': 'multi:softprob',
             'num_class': 3,
             'learning_rate': 0.01,
-            'max_depth': 4,
-            'n_estimators': 50,
+            'max_depth': 5,
+            'n_estimators': 500,
             'subsample': 0.8,
             'colsample_bytree': 0.8,
             'reg_alpha': 0.1,
@@ -354,27 +358,269 @@ class XGBoostTradingModel:
             df['2024-01-01':'2025-03-31']
         )
 
+    # def prepare_features(self, df):
+
+    #     df = df[ASSUMPTION_8].copy()
+    #     df = df.dropna()
+    #     df = df.reset_index(drop=True)
+
+    #     return df 
+
+
     def prepare_features(self, df):
-
-        df = df[ASSUMPTION_8].copy()
-        df = df.dropna()
-        df = df.reset_index(drop=True)
-
-        return df 
+        # Create directories for saving plots
+        os.makedirs("feature_distributions", exist_ok=True)
+        os.makedirs("assumption_distributions", exist_ok=True)
+        
+        # Dictionary to store test results
+        assumption_results = {}
+        
+        # Loop through all assumptions
+        for assumption_name, features in [
+            ("Assumption 1", ASSUMPTION_1),
+            ("Assumption 2", ASSUMPTION_2),
+            ("Assumption 3", ASSUMPTION_3),
+            ("Assumption 4", ASSUMPTION_4),
+            ("Assumption 5", ASSUMPTION_5),
+            ("Assumption 6", ASSUMPTION_6),
+            ("Assumption 7", ASSUMPTION_7),
+            ("Assumption 8", ASSUMPTION_8),
+        ]:
+            # Check if target is in features
+            if "target" not in features:
+                print(f"Warning: 'target' not found in {assumption_name} features")
+                continue
+                
+            # Get the feature columns (excluding target)
+            feature_cols = [f for f in features if f != "target"]
+            
+            # Check for missing features
+            missing_features = [f for f in feature_cols if f not in df.columns]
+            if missing_features:
+                print(f"Skipping {assumption_name} - Missing features: {missing_features}")
+                continue
+                
+            # Prepare data - drop rows with any NA values in these features
+            subset_df = df[features].dropna()
+            
+            if len(subset_df) == 0:
+                print(f"Skipping {assumption_name} - No data after dropping NA values")
+                continue
+                
+            # Split into positive and negative target groups
+            pos_group = subset_df[subset_df["target"] > 0][feature_cols]
+            neg_group = subset_df[subset_df["target"] <= 0][feature_cols]
+            
+            if len(pos_group) < 2 or len(neg_group) < 2:
+                print(f"Skipping {assumption_name} - Not enough samples for t-test")
+                continue
+                
+            # Perform t-tests for each feature and create plots
+            feature_results = {}
+            p_values = []
+            
+            # Create a figure for the assumption overview
+            n_features = len(feature_cols)
+            n_cols = min(3, n_features)
+            n_rows = int(np.ceil(n_features / n_cols))
+            
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5*n_rows))
+            axes = axes.flatten() if n_features > 1 else [axes]
+            
+            for i, (feature, ax) in enumerate(zip(feature_cols, axes)):
+                try:
+                    # Statistical test
+                    t_stat, p_value = ttest_ind(pos_group[feature], neg_group[feature])
+                    p_values.append(p_value)
+                    
+                    feature_results[feature] = {
+                        't_statistic': t_stat,
+                        'p_value': p_value,
+                        'pos_mean': pos_group[feature].mean(),
+                        'neg_mean': neg_group[feature].mean(),
+                        'pos_std': pos_group[feature].std(),
+                        'neg_std': neg_group[feature].std(),
+                        'mean_diff': pos_group[feature].mean() - neg_group[feature].mean(),
+                    }
+                    
+                    # Individual feature plot
+                    plt.figure(figsize=(10, 6))
+                    sns.kdeplot(pos_group[feature], label="Positive Target", color="green", fill=True)
+                    sns.kdeplot(neg_group[feature], label="Negative Target", color="red", fill=True, alpha=0.5)
+                    plt.axvline(feature_results[feature]['pos_mean'], color='green', linestyle='--', linewidth=1)
+                    plt.axvline(feature_results[feature]['neg_mean'], color='red', linestyle='--', linewidth=1)
+                    plt.title(f"{feature}\n(p-value: {p_value:.4f})")
+                    plt.xlabel(feature)
+                    plt.ylabel("Density")
+                    plt.legend()
+                    
+                    plot_filename = f"feature_distributions/{assumption_name.replace(' ', '_')}_{feature}.png"
+                    plt.savefig(plot_filename, bbox_inches='tight', dpi=300)
+                    plt.close()
+                    feature_results[feature]['plot_path'] = plot_filename
+                    
+                    # Assumption overview plot
+                    sns.kdeplot(pos_group[feature], label="Positive", color="green", ax=ax, fill=True)
+                    sns.kdeplot(neg_group[feature], label="Negative", color="red", ax=ax, fill=True, alpha=0.5)
+                    ax.axvline(feature_results[feature]['pos_mean'], color='green', linestyle='--', linewidth=1)
+                    ax.axvline(feature_results[feature]['neg_mean'], color='red', linestyle='--', linewidth=1)
+                    ax.set_title(f"{feature}\n(p={p_value:.3f})")
+                    ax.set_xlabel("")
+                    
+                except Exception as e:
+                    print(f"Error testing {feature} in {assumption_name}: {str(e)}")
+                    feature_results[feature] = {'error': str(e)}
+                    ax.set_title(f"{feature}\n(Error)")
+            
+            # Remove empty subplots
+            for j in range(i+1, len(axes)):
+                fig.delaxes(axes[j])
+            
+            # Finalize assumption overview plot
+            plt.suptitle(f"{assumption_name} Feature Distributions", y=1.02, fontsize=14)
+            plt.tight_layout()
+            assumption_plot_path = f"assumption_distributions/{assumption_name.replace(' ', '_')}_overview.png"
+            plt.savefig(assumption_plot_path, bbox_inches='tight', dpi=300)
+            plt.close()
+            
+            # Calculate assumption-level metrics
+            significant_features = [
+                f for f in feature_results 
+                if 'p_value' in feature_results[f] and feature_results[f]['p_value'] < 0.05
+            ]
+            mean_p_value = np.mean(p_values) if p_values else None
+            
+            assumption_results[assumption_name] = {
+                'features_tested': feature_cols,
+                'feature_results': feature_results,
+                'num_significant': len(significant_features),
+                'percent_significant': len(significant_features)/len(feature_cols) if feature_cols else 0,
+                'mean_p_value': mean_p_value,
+                'sample_size_pos': len(pos_group),
+                'sample_size_neg': len(neg_group),
+                'assumption_plot_path': assumption_plot_path,
+            }
+        
+        # Sort assumptions by mean p-value (best first)
+        sorted_assumptions = sorted(
+            assumption_results.items(),
+            key=lambda x: x[1]['mean_p_value'] if x[1]['mean_p_value'] is not None else float('inf')
+        )
+        
+        # Print summary of results
+        print("\n" + "="*50)
+        print("ASSUMPTION TESTING SUMMARY (Sorted by Mean p-value)")
+        print("="*50)
+        summary_data = []
+        for assumption, results in sorted_assumptions:
+            summary_data.append([
+                assumption,
+                len(results['features_tested']),
+                results['num_significant'],
+                f"{results['percent_significant']:.1%}",
+                f"{results['mean_p_value']:.4f}" if results['mean_p_value'] is not None else "N/A",
+                results['sample_size_pos'],
+                results['sample_size_neg'],
+                results['assumption_plot_path']
+            ])
+        
+        print(tabulate(summary_data, 
+                    headers=["Assumption", "Features", "Sig. Features", "% Sig.", 
+                            "Mean p-value", "Pos Samples", "Neg Samples", "Plot Path"],
+                    tablefmt="grid",
+                    floatfmt=".4f"))
+        
+        # Print detailed results for each assumption
+        print("\n" + "="*50)
+        print("DETAILED FEATURE TEST RESULTS")
+        print("="*50)
+        
+        detailed_results = []
+        for assumption, results in sorted_assumptions:
+            print(f"\n{assumption.upper()} (Mean p-value: {results['mean_p_value']:.4f})")
+            print("-"*(len(assumption) + 20))
+            
+            # Prepare data for table
+            table_data = []
+            for feature, stats in results['feature_results'].items():
+                if 'p_value' in stats:
+                    table_data.append([
+                        feature,
+                        stats['t_statistic'],
+                        stats['p_value'],
+                        stats['pos_mean'],
+                        stats['neg_mean'],
+                        stats['mean_diff'],
+                        "YES" if stats['p_value'] < 0.05 else "no",
+                        stats['plot_path'] if 'plot_path' in stats else ""
+                    ])
+            
+            # Print the table
+            print(tabulate(table_data,
+                        headers=["Feature", "t-stat", "p-value", "Pos Mean", "Neg Mean", 
+                                "Mean Diff", "Significant", "Plot Path"],
+                        tablefmt="grid",
+                        floatfmt=".4f"))
+            
+            # Store for saving
+            for feature, stats in results['feature_results'].items():
+                if 'p_value' in stats:
+                    detailed_results.append({
+                        'assumption': assumption,
+                        'feature': feature,
+                        't_statistic': stats['t_statistic'],
+                        'p_value': stats['p_value'],
+                        'pos_mean': stats['pos_mean'],
+                        'neg_mean': stats['neg_mean'],
+                        'pos_std': stats['pos_std'],
+                        'neg_std': stats['neg_std'],
+                        'mean_diff': stats['mean_diff'],
+                        'significant': stats['p_value'] < 0.05,
+                        'plot_path': stats.get('plot_path', ''),
+                        'assumption_mean_p_value': results['mean_p_value'],
+                        'assumption_plot_path': results['assumption_plot_path']
+                    })
+        
+        # Save detailed results to DataFrame
+        self.assumption_test_results = pd.DataFrame(detailed_results)
+        
+        # Print message about saved plots
+        print("\n" + "="*50)
+        print(f"Feature plots saved to: {os.path.abspath('feature_distributions')}")
+        print(f"Assumption overview plots saved to: {os.path.abspath('assumption_distributions')}")
+        print("="*50)
+        
+        # Return features from best performing assumption
+        if sorted_assumptions:
+            best_assumption = sorted_assumptions[0][0]
+            best_features = [f for f in sorted_assumptions[0][1]['features_tested'] if f in df.columns]
+            print(f"\nUsing features from best performing assumption: {best_assumption}")
+            return df[best_features].dropna().reset_index(drop=True)
+        
+        # Fallback to original features if no assumptions worked
+        required_features = [
+            "tokens_transferred_mean",
+            "tokens_transferred_median",
+            "tokens_transferred_total",
+        ]
+        missing_features = [f for f in required_features if f not in df.columns]
+        if missing_features:
+            raise ValueError(f"Missing features: {missing_features}")
+        return df[required_features].dropna().reset_index(drop=True)
     
     def normalize_data(self,df, previous_scaling=None):
         # Separate features and label
         features = df.drop(columns=["target"])
         target = df["target"].reset_index(drop=True)
 
-        if previous_scaling:
-            # Load previously saved scaler
-            scaler = load(previous_scaling)
-            scaled_features = scaler.transform(features)
-        else:
-            scaler = StandardScaler()
-            scaled_features = scaler.fit_transform(features)
-            dump(scaler, SCALING_PATH, compress=True)
+        # if previous_scaling:
+        #     # Load previously saved scaler
+        #     scaler = load(previous_scaling)
+        #     scaled_features = scaler.transform(features)
+        # else:
+        scaler = StandardScaler()
+        scaled_features = scaler.fit_transform(features)
+        dump(scaler, SCALING_PATH, compress=True)    
 
         # Combine scaled features and label
         scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
@@ -618,6 +864,8 @@ def main():
     
     # Prepare features (now returns DataFrames)
     train_feat = model.prepare_features(train)
+
+    '''
     val_feat = model.prepare_features(val)
     test_feat = model.prepare_features(test)
 
@@ -659,6 +907,8 @@ def main():
 
      # Evaluate performance
     model.evaluate_performance(equity, trades,"Test")
+
+    '''
 
 if __name__ == "__main__":
     main()

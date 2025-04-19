@@ -7,10 +7,10 @@ import pandas as pd
 
 if __name__ == "__main__":
     
+    bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")),
+                    mode="arithmetic", entry_exit_logic="mean_reversion")
     # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
-    #                 mode="arithmetic", entry_exit_logic="mean_reversion")
-    bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
-                mode="geometric", entry_exit_logic="mean_reversion")
+    #             mode="geometric", entry_exit_logic="mean_reversion")
     
     # bt.run(backtest_end_date="2023-12-31") # Run backtest only
     bt.run(forward_test=True, forward_start_date="2024-01-01") # Run backtest and forward test
