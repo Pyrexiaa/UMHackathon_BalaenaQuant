@@ -2,7 +2,7 @@ import torch
 import pandas as pd
 import numpy as np
 
-from experimental.modeling.constants import ASSUMPTION_9
+from experimental.modeling.constants import ASSUMPTION_10
 from .general_config import (
     MODEL_METRICS_PATH,
     MODEL_OUTPUT_FILE_PATH,
@@ -81,7 +81,7 @@ def preprocess_data(df):
     return np.array(X), np.array(y)
 
 def prepare_features(df):
-    df = df[ASSUMPTION_9].copy()
+    df = df[ASSUMPTION_10].copy()
     df = df.dropna()  # Drop rows with NaN values
     df = df.reset_index(drop=True)  # Reset index after dropping rows
 
