@@ -1,6 +1,6 @@
 class BaseConfig:
     FEE_RATE = 0.0006
-    THRESHOLD = 0.30
+    THRESHOLD = 0.375
     WINDOW_SIZE = 120
 
 
