@@ -18,7 +18,7 @@ from .config import (
     BUY_SIGNAL,
     HOLD_SIGNAL,
 )
-from .model_architecture import TCNClassifier
+from .model_architecture import CryptoSignalModel
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -30,17 +30,10 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 from joblib import dump, load
-from .datasets import TimeSeriesDataset
+from .datasets import GroupedFeatureTimeSeriesDataset
 from torch.utils.data import DataLoader
 from ..constants import (
-    ASSUMPTION_1,
-    ASSUMPTION_2,
-    ASSUMPTION_3,
-    ASSUMPTION_4,
-    ASSUMPTION_5,
-    ASSUMPTION_6,
-    ASSUMPTION_7,
-    ASSUMPTION_8,
+    ASSUMPTION_9
 )
 
 from ray import tune, train
@@ -54,53 +47,28 @@ TCN_DIR = os.path.dirname(CURRENT_DIR)
 MODELING_DIR = os.path.dirname(TCN_DIR)
 BASE_DIR = os.path.dirname(MODELING_DIR)
 
-assumption_map = {
-    "ASSUMPTION_1": ASSUMPTION_1,
-    "ASSUMPTION_2": ASSUMPTION_2,
-    "ASSUMPTION_3": ASSUMPTION_3,
-    "ASSUMPTION_4": ASSUMPTION_4,
-    "ASSUMPTION_5": ASSUMPTION_5,
-    "ASSUMPTION_6": ASSUMPTION_6,
-    "ASSUMPTION_7": ASSUMPTION_7,
-    "ASSUMPTION_8": ASSUMPTION_8,
-}
-
 # --- Read from env if available ---
-WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 48))
-ASSUMPTION_NAME = os.getenv("ASSUMPTION", "ASSUMPTION_7")
-ASSUMPTION = assumption_map[ASSUMPTION_NAME]
-OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", ASSUMPTION_NAME, str(WINDOW_SIZE))
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 30))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn_modified", "ASSUMPTION_9", str(WINDOW_SIZE))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Define search space for hyperparameters
 raytune_config = {
     "lr": tune.loguniform(1e-4, 1e-2),
-    "weight_decay": tune.loguniform(1e-5, 1e-3),
-    "num_channels_0": tune.choice([32, 64, 128]),
-    "num_channels_1": tune.choice([64, 128, 256]),
-    "num_channels_2": tune.choice([32, 64, 128]),
+    "encoder_dim": tune.choice([16, 32, 64]),
+    "num_channels_0": tune.choice([128, 64, 256]),
+    "num_channels_1": tune.choice([64, 32, 128]),
+    "num_channels_2": tune.choice([32, 16, 64]),
+    "tcn_dropout": tune.uniform(0.1, 0.5),
+    "head_dropout": tune.uniform(0.1, 0.5),
+    "head_hidden_dim": tune.choice([16, 32, 64]),
+    "weight_decay": tune.uniform(0.0, 1e-4),
+    "batch_size": tune.choice([32, 64]),
+    "epochs": tune.choice([10, 20])
 }
 
-
-def model_creator(trial, input_shape):
-    num_channels = [
-        trial.config["num_channels_0"],
-        trial.config["num_channels_1"],
-        trial.config["num_channels_2"],
-    ]
-    return TCNClassifier(input_shape, 3, num_channels)
-
-
-def optimizer_creator(model, trial):
-    return torch.optim.Adam(
-        model.parameters(),
-        lr=trial.config["lr"],
-        weight_decay=trial.config["weight_decay"],
-    )
-
-
 def prepare_features(df):
-    df = df[ASSUMPTION].copy()
+    df = df[ASSUMPTION_9].copy()
     df = df.dropna()  # Drop rows with NaN values
     df = df.reset_index(drop=True)  # Reset index after dropping rows
 
@@ -469,13 +437,18 @@ def train_tune(config):
         X_val, y_val = X[val_idx], y[val_idx]
 
         # Create datasets and dataloaders
-        train_loader = DataLoader(TimeSeriesDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=False)
-        val_loader = DataLoader(TimeSeriesDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
+        train_loader = DataLoader(GroupedFeatureTimeSeriesDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=False)
+        val_loader = DataLoader(GroupedFeatureTimeSeriesDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
 
         # Init model
-        input_features = X.shape[2]
-        num_channels = [config[f"num_channels_{i}"] for i in range(3)]
-        model = TCNClassifier(input_features, 3, num_channels)
+        model = CryptoSignalModel(
+            num_classes=3,
+            encoder_dim=config["encoder_dim"],
+            tcn_channels=[config[f"num_channels_{i}"] for i in range(3)],
+            tcn_dropout=config["tcn_dropout"],
+            head_dropout=config["head_dropout"],
+            head_hidden_dim=config["head_hidden_dim"]
+        )
         optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
         class_weights = calculate_class_distribution(y_train)
         loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -491,6 +464,7 @@ def train_tune(config):
             model.train()
             for batch_x, batch_y in train_loader:
                 optimizer.zero_grad()
+                batch_x = {k: v for k, v in batch_x.items()}
                 logits = model(batch_x)
                 loss = loss_criterion(logits, batch_y)
                 loss.backward()
@@ -501,6 +475,7 @@ def train_tune(config):
         all_preds, all_targets = [], []
         with torch.no_grad():
             for val_x, val_y in val_loader:
+                val_x = {k: v for k, v in val_x.items()}
                 val_preds = model(val_x)
                 _, predicted = torch.max(val_preds.data, 1)
                 all_preds.extend(predicted.cpu().numpy())
@@ -542,8 +517,6 @@ def train_tune(config):
 
     # Report average metrics to Ray Tune
     mean_metrics = metrics_df.drop(columns=["fold", "config_id"]).mean().to_dict()
-    train.report(metrics=mean_metrics)
-
     # Optional: Save last model again for Ray Tune checkpoint
     final_checkpoint_dir = os.path.join(OUTPUT_DIR, MODEL_CHECKPOINT_PATH, "final_checkpoint")
     os.makedirs(final_checkpoint_dir, exist_ok=True)
@@ -551,9 +524,7 @@ def train_tune(config):
         {"epoch": EPOCHS, "model_state": model.state_dict()},
         os.path.join(final_checkpoint_dir, "checkpoint.pt"),
     )
-    train.report(
-        checkpoint=Checkpoint.from_directory(final_checkpoint_dir)
-    )
+    train.report(metrics=mean_metrics, checkpoint=Checkpoint.from_directory(final_checkpoint_dir))
 
 if __name__ == "__main__":
     dataset_path = os.path.join(
@@ -577,10 +548,10 @@ if __name__ == "__main__":
     X_train, y_train = preprocess_data(scaled_train)
     X_test, y_test = preprocess_data(scaled_test)
     # --- Convert to Torch tensors and DataLoaders ---
-    train_dataset = TimeSeriesDataset(X_train, y_train)
-    test_dataset = TimeSeriesDataset(X_test, y_test)
+    train_dataset = GroupedFeatureTimeSeriesDataset(X_train, y_train)
+    test_dataset = GroupedFeatureTimeSeriesDataset(X_test, y_test)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Train model
@@ -625,7 +596,7 @@ if __name__ == "__main__":
 
     input_features = X_train.shape[2]  # Get input features dynamically
     num_channels = [best_config[f"num_channels_{i}"] for i in range(3)]
-    best_model = TCNClassifier(input_features, 3, num_channels)
+    best_model = CryptoSignalModel(input_features, 3, num_channels)
     checkpoint = torch.load(best_checkpoint_path)
     best_model.load_state_dict(checkpoint["model_state"])
 

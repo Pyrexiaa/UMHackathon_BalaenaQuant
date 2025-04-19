@@ -1,3 +1,4 @@
+from quantpilot.visualization.run import run_dashboard
 from sample_data import BTC_DATA
 from quantpilot.strategy import MLStrategy
 import pandas as pd
@@ -15,3 +16,4 @@ bt = Multibacktester(
 
 bt.run_all(forward_test=True, forward_start_date="2024-01-01")
 # bt.run_all(forward_test=True, forward_start_date="2024-01-01", show_plot=True)
+run_dashboard()

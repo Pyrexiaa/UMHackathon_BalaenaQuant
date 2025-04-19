@@ -1,3 +1,4 @@
+import json
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -71,6 +72,8 @@ class Backtester:
         :return: Dictionary with results and metrics
         """
         output = {'results': None, 'metrics': {}}
+        
+        print("STRATEGY NAME:", self.strategy_name)
 
         def slice_range(data, start=None, end=None, years=None):
             if start:
@@ -144,6 +147,7 @@ class Backtester:
                 'forward': self._calculate_metrics(forward_results, forward_trades, forward_records),
                 'full': self._calculate_metrics(self.results, self.trades, self.records)
             }
+            
 
         else:
             # Backtest only
@@ -172,6 +176,17 @@ class Backtester:
             trades_path=f'output/trade_{self.strategy_name.lower()}.csv',
             records_path=f'output/records_{self.strategy_name.lower()}.csv'
         )
+        
+        periods_metadata = {
+        key: {
+            'start': str(val['start']),
+            'end': str(val['end'])
+        } for key, val in self.periods.items()
+        
+        }
+
+        with open(f'output/meta_{self.strategy_name.lower()}.json', 'w') as f:
+            json.dump(periods_metadata, f, indent=4)
         
         return output
 
@@ -608,4 +623,7 @@ class Backtester:
 
         metrics_df = pd.DataFrame([self.metrics])  # Convert dict to DataFrame
         metrics_df.to_csv(filepath, index=False)
+    
+        
+
     
