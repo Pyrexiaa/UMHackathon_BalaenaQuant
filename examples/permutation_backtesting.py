@@ -1,12 +1,12 @@
 from sample_data import BTC_DATA
 from quantpilot.strategy import MLStrategy
 import pandas as pd
-from quantpilot.permutation_backtester import BacktesterPermutationTest
+from quantpilot.permutation_backtester import PermutationBacktester
 from quantpilot.models import get_model
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# runner = BacktesterPermutationTest(
+# runner = PermutationBacktester(
 #     data=BTC_DATA,
 #     strategy=MLStrategy(get_model("TCN")),
 #     threshold_values=[0.3, 0.4, 0.5],
@@ -24,7 +24,7 @@ all_heatmaps = []
 
 for strategy in ["TCN", "XGBoost"]:
     print(f"Running permutation test for strategy: {strategy}")
-    runner = BacktesterPermutationTest(
+    runner = PermutationBacktester(
         data=BTC_DATA,
         strategy=MLStrategy(get_model(strategy)),
         strategy_name=strategy,

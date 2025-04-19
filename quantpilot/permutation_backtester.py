@@ -6,7 +6,7 @@ import seaborn as sns
 from quantpilot.backtester import Backtester
 from quantpilot.strategy import BaseStrategy, MLStrategy
 
-class BacktesterPermutationTest:
+class PermutationBacktester:
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: BaseStrategy,
@@ -20,7 +20,7 @@ class BacktesterPermutationTest:
                  entry_exit_logic: str = 'mean_reversion',
                  output_dir: str = "output"):
         """
-        Initialize BacktesterPermutationTest to loop through various thresholds and run backtests.
+        Initialize PermutationBacktester to loop through various thresholds and run backtests.
         """
         self.data = data
         self.strategy = strategy
