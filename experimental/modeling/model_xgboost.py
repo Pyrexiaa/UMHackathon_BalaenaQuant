@@ -1,25 +1,33 @@
 """
 XGBoost Trading Strategy Implementation
 """
+
 import os
 from pathlib import Path
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 import numpy as np
 from xgboost import XGBClassifier
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.metrics import classification_report
 import joblib
 from joblib import dump, load
-import json
-from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
-from .constants import (ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+from scipy.stats import f_oneway
 
 import sys
 
 # Add the path to your 'quantpilot' folder dynamically
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../quantpilot"))
+)
 
 # from features.technical_indicators import MovingAverageFeature, VolatilityFeature
 
@@ -35,8 +43,52 @@ SCALING_PATH = "quantpilot/models_weights/xgboost_assumption_8/scaler.pkl"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
+
 class XGBoostTradingModel:
     def __init__(self):
+        self.ALL_ON_CHAIN_FEATURES = [
+            "difficulty",
+            "estimated_leverage_ratio",
+            "addresses_count_active",
+            "addresses_count_sender",
+            "addresses_count_receiver",
+            "exchange_whale_ratio",
+            "coinbase_premium_gap",
+            "coinbase_premium_index",
+            "coinbase_premium_gap_usdt_adjusted",
+            "coinbase_premium_index_usdt_adjusted",
+            "taker_buy_volume",
+            "taker_sell_volume",
+            "taker_buy_ratio",
+            "taker_sell_ratio",
+            "taker_buy_sell_ratio",
+            "blockreward",
+            "blockreward_usd",
+            "fees_transaction_mean",
+            "fees_transaction_mean_usd",
+            "fees_transaction_median",
+            "fees_transaction_median_usd",
+            "miner_supply_ratio",
+            "addresses_count_inflow",
+            "addresses_count_outflow",
+            "exchange_supply_ratio",
+            "transactions_count_inflow",
+            "tokens_transferred_total",
+            "tokens_transferred_mean",
+            "tokens_transferred_median",
+            "transactions_count_inflow",
+            "transactions_count_outflow",
+            "long_liquidations",
+            "short_liquidations",
+            "long_liquidations_usd",
+            "short_liquidations_usd",
+            "open_price",
+            "high_price",
+            "low_price",
+            "close_price",
+            "volume",
+            "open_interest",
+        ]
         self.model = None
         self.scaler = StandardScaler()
         self.features = None
@@ -50,97 +102,6 @@ class XGBoostTradingModel:
         self.optimal_window = None
         self.optimal_buy_thresh = 0.6  # Default higher threshold for buys
         self.optimal_sell_thresh = 0.4  # Default lower threshold for sells
-    
-    '''
-    method to loop window
-    '''
-    # def optimize_parameters(self, X: np.ndarray, y: np.ndarray):
-    #     """
-    #     Optimize window size and thresholds using walk-forward validation.
-    #     Called internally during training.
-    #     """
-    #     best_score = -np.inf
-    #     best_params = {}
-        
-    #     # Convert y to numpy array if it's not already
-    #     y = np.array(y)
-        
-    #     # Get unique classes in the full dataset
-    #     unique_classes = np.unique(y)
-    #     num_classes = len(unique_classes)
-        
-    #     # Ensure we have all 3 classes (0, 1, 2)
-    #     if num_classes != 3:
-    #         print(f"Warning: Expected 3 classes but found {num_classes}. Using default parameters.")
-    #         return
-            
-    #     for window_size in self.WINDOW_SIZES:
-    #         if window_size >= len(X):
-    #             continue
-                
-    #         for buy_thresh in self.THRESHOLDS:
-    #             for sell_thresh in [t for t in self.THRESHOLDS if t < buy_thresh]:
-    #                 scores = []
-    #                 valid_windows = 0
-
-    #                 print(f"Trying window={window_size}, buy={buy_thresh}, sell={sell_thresh}")
-
-                    
-    #                 for i in range(window_size, len(X)):
-    #                     # Get current window data
-    #                     X_window = X[i-window_size:i]
-    #                     y_window = y[i-window_size:i]
-                        
-    #                     # Check if window has all 3 classes
-    #                     window_classes = np.unique(y_window)
-    #                     if len(window_classes) != 3:
-    #                         continue  # Skip windows missing classes
-                            
-    #                     valid_windows += 1
-                        
-    #                     # Clone the base model for this window
-    #                     window_model = XGBClassifier(
-    #                         objective='multi:softprob',
-    #                         num_class=3,
-    #                         n_estimators=50,  # Smaller for faster training
-    #                         random_state=42
-    #                     )
-                        
-    #                     # Train on window
-    #                     window_model.fit(X_window, y_window)
-                        
-    #                     # Predict next step
-    #                     probs = window_model.predict_proba(X[i-1:i])[0]
-                        
-    #                     # Apply threshold rules
-    #                     if probs[0] > buy_thresh and probs[2] <= sell_thresh:
-    #                         pred = 1  # Buy
-    #                     elif probs[2] > sell_thresh and probs[0] <= buy_thresh:
-    #                         pred = -1  # Sell
-    #                     else:
-    #                         pred = 0  # Hold
-                            
-    #                     # Score prediction
-    #                     scores.append(1 if pred == y[i] else 0)
-                    
-    #                 if valid_windows > 0 and scores:
-    #                     avg_score = np.mean(scores)
-    #                     if avg_score > best_score:
-    #                         best_score = avg_score
-    #                         best_params = {
-    #                             'window_size': window_size,
-    #                             'buy_thresh': buy_thresh,
-    #                             'sell_thresh': sell_thresh
-    #                         }
-    #                         print(f"New best: Window={window_size}, Buy={buy_thresh}, Sell={sell_thresh}, Score={avg_score:.4f}")
-        
-    #     if best_params:
-    #         self.optimal_window = best_params['window_size']
-    #         self.optimal_buy_thresh = best_params['buy_thresh']
-    #         self.optimal_sell_thresh = best_params['sell_thresh']
-    #         print(f"\nOptimized parameters - Window: {self.optimal_window}, Buy Threshold: {self.optimal_buy_thresh}, Sell Threshold: {self.optimal_sell_thresh}")
-    #     else:
-    #         print("Warning: Parameter optimization failed. Using defaults.")
 
     def optimize_parameters(self, X: np.ndarray, y: np.ndarray):
         """Use window size 48 and threshold 0.3 for quick testing."""
@@ -153,18 +114,20 @@ class XGBoostTradingModel:
 
         # Ensure we have all 3 classes (0, 1, 2)
         if num_classes != 3:
-            print(f"Warning: Expected 3 classes but found {num_classes}. Using default parameters.")
+            print(
+                f"Warning: Expected 3 classes but found {num_classes}. Using default parameters."
+            )
             return
-        
+
         # Set window size to 48 and threshold to 0.3
         window_size = 48
         if window_size >= len(X):
             print("Window size too large for data. Using defaults.")
             return
-            
+
         scores = []
         valid_windows = 0
-        total_windows = len(X) - window_size
+        total_windows = len(X) // window_size
 
         print(f"Testing with window={window_size}")
         print(f"Total windows to process: {total_windows}")
@@ -174,33 +137,37 @@ class XGBoostTradingModel:
         sell_thresh = 0.3
 
         # Iterate over each window individually
-        for i in range(window_size, min(len(X), window_size + 100)):  # Limit to 100 windows for testing
+        for i in range(
+            window_size, min(len(X), window_size + 100)
+        ):  # Limit to 100 windows for testing
             # Get current window data
-            X_window = X[i - window_size:i]
-            y_window = y[i - window_size:i]
+            X_window = X[i - window_size : i]
+            y_window = y[i - window_size : i]
 
             # Check if window has all 3 classes
             window_classes = np.unique(y_window)
             if len(window_classes) != 3:
-                print(f"Skipping window {i-window_size}-{i} (missing classes)")
+                print(f"Skipping window {i - window_size}-{i} (missing classes)")
                 continue  # Skip windows missing classes
 
             valid_windows += 1
-            print(f"Processing valid window {i-window_size}-{i} ({valid_windows}/{total_windows})")
+            print(
+                f"Processing valid window {i - window_size}-{i} ({valid_windows}/{total_windows})"
+            )
 
             # Clone the base model for this window
             window_model = XGBClassifier(
-                objective='multi:softprob',
+                objective="multi:softprob",
                 num_class=3,
                 n_estimators=50,  # Smaller for faster training
-                random_state=42
+                random_state=42,
             )
 
             # Train on window
             window_model.fit(X_window, y_window)
 
             # Predict next step
-            probs = window_model.predict_proba(X[i - 1:i])[0]
+            probs = window_model.predict_proba(X[i - 1 : i])[0]
 
             # Apply threshold rules
             if probs[0] > buy_thresh and probs[2] <= sell_thresh:
@@ -215,10 +182,11 @@ class XGBoostTradingModel:
 
         if valid_windows > 0 and scores:
             avg_score = np.mean(scores)
-            print(f"\nTest results - Window: {window_size}, Buy Threshold: {buy_thresh}, Sell Threshold: {sell_thresh}, Score: {avg_score:.4f}")
+            print(
+                f"\nTest results - Window: {window_size}, Buy Threshold: {buy_thresh}, Sell Threshold: {sell_thresh}, Score: {avg_score:.4f}"
+            )
         else:
             print("No valid windows found for testing.")
-
 
     def train_model(self, X_train, y_train, X_val, y_val):
         # Convert to numpy arrays
@@ -226,143 +194,267 @@ class XGBoostTradingModel:
         y_train = np.array(y_train)
         X_val = np.array(X_val)
         y_val = np.array(y_val)
-        
+
         # Check class distribution
         unique_classes = np.unique(y_train)
         if len(unique_classes) != 3:
-            raise ValueError(f"Training data must contain all 3 classes. Found: {unique_classes}")
-    
+            raise ValueError(
+                f"Training data must contain all 3 classes. Found: {unique_classes}"
+            )
+
         params = {
-            'objective': 'multi:softprob',
-            'num_class': 3,
-            'learning_rate': 0.01,
-            'max_depth': 4,
-            'n_estimators': 50,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'reg_alpha': 0.1,
-            'reg_lambda': 0.5,
-            'min_child_weight': 3,
-            'gamma': 0.1,
-            'eval_metric': ['mlogloss', 'merror'],
-            'early_stopping_rounds': 50
+            "objective": "multi:softprob",
+            "num_class": 3,
+            "learning_rate": 0.01,
+            "max_depth": 4,
+            "n_estimators": 50,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 0.5,
+            "min_child_weight": 3,
+            "gamma": 0.1,
+            "eval_metric": ["mlogloss", "merror"],
+            "early_stopping_rounds": 50,
         }
-        
+
         # Class weights
         class_counts = np.bincount(y_train)
         weights = len(y_train) / (3 * class_counts)
         sample_weights = np.array([weights[label] for label in y_train])
-        
+
         self.model = XGBClassifier(**params)
         self.model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             sample_weight=sample_weights,
-            verbose=10
+            verbose=10,
         )
-        
+
         # Add optimization after initial training
         print("\nOptimizing trading parameters...")
         self.optimize_parameters(X_train, y_train)
 
-
     def predict_signals(self, X):
         probs = self.model.predict_proba(X)
         signals = np.ones(len(probs), dtype=int)  # Default: Hold (0)
-        
+
         # Apply thresholds (using 0,1,2 internally)
-        signals[probs[:, 2] > self.optimal_buy_thresh] = 2    # Buy
-        signals[probs[:, 0] > self.optimal_sell_thresh] = 0   # Sell
-        
+        signals[probs[:, 2] > self.optimal_buy_thresh] = 2  # Buy
+        signals[probs[:, 0] > self.optimal_sell_thresh] = 0  # Sell
+
         # Convert to -1, 0, 1 for external use (optional)
         signals = signals - 1  # 0→-1, 1→0, 2→1
-        
+
         return signals
-    
-    def save_model(self):
+
+    def save_model(self, fold=None):
         """Save model with optimization parameters"""
         model_data = {
-            'model': self.model,
-            'scaler': self.scaler,
-            'optimal_window': self.optimal_window,
-            'optimal_buy_thresh': self.optimal_buy_thresh,
-            'optimal_sell_thresh': self.optimal_sell_thresh,
-            'features': self.features
+            "model": self.model,
+            "scaler": self.scaler,
+            "optimal_window": self.optimal_window,
+            "optimal_buy_thresh": self.optimal_buy_thresh,
+            "optimal_sell_thresh": self.optimal_sell_thresh,
+            "features": self.features,
         }
-        joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")    
-        print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
+        if fold is not None:
+            joblib.dump(model_data, MODEL_DIR / f"xgboost_model_fold_{fold}.pkl")
+            print(f"Model saved to {MODEL_DIR / f'xgboost_model_fold_{fold}.pkl'}")
+        else:
+            joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")
+            print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
 
     def evaluate_model_performance(self, y_true, y_pred, set_name="Validation"):
-            """
-            Evaluate classification performance metrics including balanced accuracy,
-            precision, recall, and F1 score for each class and averaged.
-            """
-            # Convert signals back to 0,1,2 if they're in -1,0,1 format
-            if set(np.unique(y_pred)) == {-1, 0, 1}:
-                y_pred = y_pred + 1
-            
-            print(f"\n{classification_report(y_true, y_pred)}")
-            
-            # Calculate metrics for each class
-            metrics = {
-                'balanced_accuracy': balanced_accuracy_score(y_true, y_pred),
-                'precision_macro': precision_score(y_true, y_pred, average='macro'),
-                'recall_macro': recall_score(y_true, y_pred, average='macro'),
-                'f1_macro': f1_score(y_true, y_pred, average='macro'),
-                'precision_weighted': precision_score(y_true, y_pred, average='weighted'),
-                'recall_weighted': recall_score(y_true, y_pred, average='weighted'),
-                'f1_weighted': f1_score(y_true, y_pred, average='weighted')
-            }
-            
-            # Print the results
-            print(f"\n{set_name} Classification Performance:")
-            print(f"Balanced Accuracy: {metrics['balanced_accuracy']:.4f}")
-            print(f"Macro Precision: {metrics['precision_macro']:.4f}")
-            print(f"Macro Recall: {metrics['recall_macro']:.4f}")
-            print(f"Macro F1 Score: {metrics['f1_macro']:.4f}")
-            print(f"Weighted Precision: {metrics['precision_weighted']:.4f}")
-            print(f"Weighted Recall: {metrics['recall_weighted']:.4f}")
-            print(f"Weighted F1 Score: {metrics['f1_weighted']:.4f}")
-            
-            return metrics
+        """
+        Evaluate classification performance metrics including balanced accuracy,
+        precision, recall, and F1 score for each class and averaged.
+        """
+        # Convert signals back to 0,1,2 if they're in -1,0,1 format
+        if set(np.unique(y_pred)) == {-1, 0, 1}:
+            y_pred = y_pred + 1
 
-    def load_csv(self,df_path):
+        print(f"\n{classification_report(y_true, y_pred)}")
+
+        # Calculate metrics for each class
+        metrics = {
+            "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
+            "precision_macro": precision_score(y_true, y_pred, average="macro"),
+            "recall_macro": recall_score(y_true, y_pred, average="macro"),
+            "f1_macro": f1_score(y_true, y_pred, average="macro"),
+            "precision_weighted": precision_score(y_true, y_pred, average="weighted"),
+            "recall_weighted": recall_score(y_true, y_pred, average="weighted"),
+            "f1_weighted": f1_score(y_true, y_pred, average="weighted"),
+        }
+
+        # Print the results
+        print(f"\n{set_name} Classification Performance:")
+        print(f"Balanced Accuracy: {metrics['balanced_accuracy']:.4f}")
+        print(f"Macro Precision: {metrics['precision_macro']:.4f}")
+        print(f"Macro Recall: {metrics['recall_macro']:.4f}")
+        print(f"Macro F1 Score: {metrics['f1_macro']:.4f}")
+        print(f"Weighted Precision: {metrics['precision_weighted']:.4f}")
+        print(f"Weighted Recall: {metrics['recall_weighted']:.4f}")
+        print(f"Weighted F1 Score: {metrics['f1_weighted']:.4f}")
+
+        return metrics
+
+    def load_csv(self, df_path):
         df = pd.read_csv(df_path)
-        
+
         # Keep and parse datetime
         df["datetime"] = pd.to_datetime(df["datetime"])
         df["year"] = df["datetime"].dt.year
-        
+
         # Drop nan rows
         # df = df.dropna()
 
         # Split by year
-        df_train = df[df["year"].between(2020, 2022)].copy()
-        df_val = df[df["year"] == 2023].copy()
+        df_train = df[df["year"] < 2024].copy()
         df_test = df[df["year"] >= 2024].copy()
 
         df_train = df_train.drop(columns=["datetime", "year"], axis=1)
-        df_val = df_val.drop(columns=["datetime", "year"], axis=1)
         df_test = df_test.drop(columns=["datetime", "year"], axis=1)
 
-        return df_train, df_val, df_test
+        return df_train, df_test
 
     def train_val_test_split(self, df):
         return (
-            df['2020-01-01':'2022-12-31'],
-            df['2023-01-01':'2023-12-31'],
-            df['2024-01-01':'2025-03-31']
+            df["2020-01-01":"2022-12-31"],
+            df["2023-01-01":"2023-12-31"],
+            df["2024-01-01":"2025-03-31"],
         )
 
-    def prepare_features(self, df):
+    def prepare_features(
+        self, df, plot_dir="plots", rolling_windows=[24, 48, 72, 96, 120]
+    ):
+        if "target" not in df.columns:
+            raise ValueError("DataFrame must contain 'target' column")
 
-        df = df[ASSUMPTION_8].copy()
-        df = df.dropna()
-        df = df.reset_index(drop=True)
+        os.makedirs(plot_dir, exist_ok=True)
+        features = [f for f in self.ALL_ON_CHAIN_FEATURES if f in df.columns]
 
-        return df 
-    
-    def normalize_data(self,df, previous_scaling=None):
+        # Store results for each (feature, window) combination
+        all_anova_results = []
+
+        for window in rolling_windows:
+            df_rolled = df.copy()
+
+            # Apply rolling window mean per feature (grouped by sample id if needed)
+            for feature in features:
+                df_rolled[f"{feature}_roll{window}"] = (
+                    df[feature].rolling(window=window, min_periods=1).mean()
+                )
+
+            # Run ANOVA on each rolled feature
+            for feature in features:
+                feature_roll = f"{feature}_roll{window}"
+                if feature_roll not in df_rolled.columns:
+                    continue
+
+                groups = []
+                for target_value in sorted(df_rolled["target"].dropna().unique()):
+                    values = df_rolled[df_rolled["target"] == target_value][
+                        feature_roll
+                    ].dropna()
+                    if not values.empty:
+                        groups.append(values)
+
+                if len(groups) > 1:  # Ensure we have at least 2 groups to compare
+                    f_val, p_val = f_oneway(*groups)
+                    all_anova_results.append(
+                        {
+                            "feature": feature,
+                            "window": window,
+                            "F-value": f_val,
+                            "p-value": p_val,
+                        }
+                    )
+
+        # Save ANOVA results for all rolling windows
+        anova_df = pd.DataFrame(all_anova_results)
+        anova_df.sort_values(["feature", "p-value"], inplace=True)
+        anova_df.to_csv(os.path.join(plot_dir, "anova_window_results.csv"), index=False)
+
+        # Keep only the best (lowest p-value) row for each feature
+        best_anova_df = anova_df.loc[anova_df.groupby("feature")["p-value"].idxmin()]
+        # Sort by p-value ascending
+        best_anova_df.sort_values("p-value", inplace=True)
+
+        # Find the best (lowest p-value) window per feature
+        best_windows_df = anova_df.loc[
+            anova_df.groupby("feature")["p-value"].idxmin()
+        ].copy()
+
+        # Sort by p-value or alphabetically
+        best_windows_df.sort_values("p-value", inplace=True)
+
+        # Plot
+        plt.figure(figsize=(12, 6))
+        sns.barplot(x="feature", y="window", data=best_windows_df, palette="viridis")
+        plt.xticks(rotation=45, ha="right")
+        plt.title("Best Rolling Window Size by Feature (Lowest ANOVA p-value)")
+        plt.ylabel("Window Size")
+        plt.xlabel("Feature")
+        plt.tight_layout()
+        plt.grid(True, axis="y")
+        plt.savefig(
+            os.path.join(plot_dir, "anova_window_results_plot.png"),
+            bbox_inches="tight",
+            dpi=300,
+        )
+        plt.close()
+
+        # Generate original boxplots only for non-rolling version
+        for feature in features:
+            if feature not in df.columns:
+                continue
+
+            groups = []
+            for target_value in sorted(df["target"].dropna().unique()):
+                groups.append(df[df["target"] == target_value][feature].dropna())
+
+            if len(groups) > 1:
+                f_val, p_val = f_oneway(*groups)
+
+                plt.figure(figsize=(10, 6))
+                sns.boxplot(x="target", y=feature, data=df)
+
+                if p_val < 0.0001:
+                    p_text = f"ANOVA p-value: {p_val:.2e}"
+                else:
+                    p_text = f"ANOVA p-value: {p_val:.4f}"
+
+                plt.title(f"Distribution of {feature} by Target Group\n{p_text}")
+                plt.xlabel("Target Class")
+                plt.ylabel(feature)
+
+                plot_filename = os.path.join(plot_dir, f"{feature}_boxplot.png")
+                plt.savefig(plot_filename, bbox_inches="tight", dpi=300)
+                plt.close()
+
+        return anova_df
+
+    def select_best_common_window(self, df, feature_list):
+        """
+        Given an ANOVA result dataframe and a list of features,
+        return the most common best window size.
+        """
+        # Filter to selected features
+        df_selected = df[df["feature"].isin(feature_list)]
+
+        # Get best (lowest p-value) window for each feature
+        best_per_feature = df_selected.loc[
+            df_selected.groupby("feature")["p-value"].idxmin()
+        ]
+
+        # Count the most common best window size
+        most_common_window = best_per_feature["window"].value_counts().idxmax()
+
+        return most_common_window, best_per_feature
+
+    def normalize_data(self, df, previous_scaling=None):
         # Separate features and label
         features = df.drop(columns=["target"])
         target = df["target"].reset_index(drop=True)
@@ -381,80 +473,77 @@ class XGBoostTradingModel:
         scaled_df["target"] = target
 
         return scaled_df
-    
 
     def get_param_grid(self):
         return {
-            'learning_rate': [0.01, 0.02],  
-            'max_depth': [4, 5, 6],            
-            'n_estimators': [50, 100],      
-            'subsample': [0.7, 0.6],        
-            'colsample_bytree': [0.7, 0.6],
-            'min_child_weight': [3],
-            'gamma': [0.1],
-            'reg_alpha': [0.1],
-            'reg_lambda': [0.5]
+            "learning_rate": [0.01, 0.02],
+            "max_depth": [4, 5, 6],
+            "n_estimators": [50, 100],
+            "subsample": [0.7, 0.6],
+            "colsample_bytree": [0.7, 0.6],
+            "min_child_weight": [3],
+            "gamma": [0.1],
+            "reg_alpha": [0.1],
+            "reg_lambda": [0.5],
         }
-    
+
     def tune_hyperparameters(self, X_train, y_train, X_val, y_val):
         # Create time-series cross-validation
         tscv = TimeSeriesSplit(n_splits=3)
-        
+
         # Initialize model with fixed params
         base_model = XGBClassifier(
-            objective='multi:softmax',
+            objective="multi:softmax",
             num_class=3,
-            tree_method='hist',
-            eval_metric=['mlogloss'],
+            tree_method="hist",
+            eval_metric=["mlogloss"],
             early_stopping_rounds=50,
-            random_state=42
+            random_state=42,
         )
-        
+
         # Setup GridSearch
         grid_search = GridSearchCV(
             estimator=base_model,
             param_grid=self.get_param_grid(),
-            scoring='neg_log_loss',  # For probabilistic classification
+            scoring="neg_log_loss",  # For probabilistic classification
             cv=tscv,
             verbose=3,
             n_jobs=-1,
-            refit=True
+            refit=True,
         )
-        
+
         # Sample weights for class imbalance
-        sample_weights = np.where(
-            y_train == 0, 1.5, 
-            np.where(y_train == 1, 1.0, 1.3)
-        )
-        
+        sample_weights = np.where(y_train == 0, 1.5, np.where(y_train == 1, 1.0, 1.3))
+
         # Fit with validation data as early stopping
         grid_search.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             sample_weight=sample_weights,
-            verbose=10
+            verbose=10,
         )
-        
+
         # Save best model
         self.model = grid_search.best_estimator_
-        
+
         print("\nBest parameters found:")
         print(grid_search.best_params_)
         print(f"Best validation score: {grid_search.best_score_:.4f}")
-        
+
         return grid_search
-    
-    def analyze_clusters(self, df, predictions, cluster_column='kmeans_cluster'):
+
+    def analyze_clusters(self, df, predictions, cluster_column="kmeans_cluster"):
         """
         Analyzes model predictions by different clusters.
-        
+
         Args:
             df (pd.DataFrame): The original dataset with a cluster column.
             predictions (np.array): Model predictions aligned with df.
             cluster_column (str): The name of the clustering column in df.
         """
         df = df.copy()
-        df['predicted_signal'] = predictions
+        df["predicted_signal"] = predictions
 
         if cluster_column not in df.columns:
             print(f"Cluster column '{cluster_column}' not found in dataframe.")
@@ -465,13 +554,12 @@ class XGBoostTradingModel:
         for cluster, group in cluster_groups:
             print(f"\nCluster {cluster} - Sample Size: {len(group)}")
             print("Predicted Signal Distribution:")
-            print(group['predicted_signal'].value_counts())
+            print(group["predicted_signal"].value_counts())
             print("True Target Distribution:")
-            print(group['target'].value_counts())
+            print(group["target"].value_counts())
 
             print("\nClassification Report:")
-            print(classification_report(group['target'], group['predicted_signal']))
-            
+            print(classification_report(group["target"], group["predicted_signal"]))
 
     def backtest(self, df, signals):
         capital = 1_000_000
@@ -480,31 +568,33 @@ class XGBoostTradingModel:
         equity = []
         trades = []
         trade_dates = []
-        
+
         # Fixed risk parameters (removed volatility dependency)
         stop_loss = 0.02  # Fixed 2% stop loss
         take_profit = 0.03  # Fixed 3% take profit
         position_size_pct = 0.05  # Fixed 5% position size
-        
+
         for i in range(1, len(df)):
-            price = df.iloc[i]['close']
-            
+            price = df.iloc[i]["close"]
+
             # Exit conditions
             if position != 0:
                 pnl = position * (price - entry_price)
                 returns = pnl / abs(position * entry_price)
-                
+
                 # Simplified exit logic
-                if (returns < -stop_loss) or (returns > take_profit) or \
-                (signals[i] != (2 if position > 0 else 0)):
-                    
+                if (
+                    (returns < -stop_loss)
+                    or (returns > take_profit)
+                    or (signals[i] != (2 if position > 0 else 0))
+                ):
                     # Apply fees and close position
                     pnl -= abs(position * price) * FEE_RATE
                     capital += pnl
                     trades.append(pnl)
                     trade_dates.append(df.index[i])
                     position = 0
-            
+
             # Entry conditions - simplified
             if position == 0 and signals[i] != 1:  # Just check if not hold signal
                 entry_price = price
@@ -512,13 +602,14 @@ class XGBoostTradingModel:
                 position = position_size if signals[i] == 2 else -position_size
                 capital -= abs(position * price) * (1 + FEE_RATE)
                 trade_dates.append(df.index[i])
-            
+
             equity.append(capital + position * price)
-        
+
         return np.array(equity), trades, trade_dates
 
-    def evaluate_performance(self, df, equity, trades, trade_dates, set_name="Validation"):
-
+    def evaluate_performance(
+        self, df, equity, trades, trade_dates, set_name="Validation"
+    ):
         # print(f"\n--- {set_name} Trade Dates ---")
         # for date in trade_dates:
         #     print(date)
@@ -526,14 +617,18 @@ class XGBoostTradingModel:
 
         # Calculate trading days
         total_days = (df.index[-1] - df.index[0]).days
-        unique_trade_days = len(set([d.date() for d in trade_dates]))  # Count unique trading days
-        trade_frequency = (unique_trade_days / total_days) * 100  # % of days with trades
+        unique_trade_days = len(
+            set([d.date() for d in trade_dates])
+        )  # Count unique trading days
+        trade_frequency = (
+            unique_trade_days / total_days
+        ) * 100  # % of days with trades
 
         returns = np.diff(equity) / equity[:-1]
-        
+
         # Sharpe Ratio (annualized)
         sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
-        
+
         # Max Drawdown
         peak = equity[0]
         max_dd = 0
@@ -543,38 +638,41 @@ class XGBoostTradingModel:
             dd = (peak - value) / peak
             if dd > max_dd:
                 max_dd = dd
-        
+
         # Win Rate
         win_rate = np.mean(np.array(trades) > 0) if trades else 0
-        
+
         # Rest of your metrics...
         print(f"Trade Frequency: {trade_frequency:.2f}% of days had trades")
-        
+
         print(f"\n{set_name} Performance:")
         print(f"Sharpe Ratio: {sharpe:.2f}")
         print(f"Max Drawdown: {max_dd:.2%}")
         print(f"Total Trades: {len(trades)}")
         print(f"Win Rate: {win_rate:.2%}")
         print(f"Trade Frequency: {trade_frequency:.2f}% of days")
-        
+
         # Strategy Validation
         passed = (sharpe >= 1.8) and (max_dd <= 0.4) and (trade_frequency >= 3.0)
         print(f"\nStrategy Passed: {'YES' if passed else 'NO'}")
-        
+
         return {
-            'sharpe': sharpe,
-            'max_drawdown': max_dd,
-            'num_trades': len(trades),
-            'win_rate': win_rate,
-            'trade_frequency': trade_frequency,
-            'passed': passed
+            "sharpe": sharpe,
+            "max_drawdown": max_dd,
+            "num_trades": len(trades),
+            "win_rate": win_rate,
+            "trade_frequency": trade_frequency,
+            "passed": passed,
         }
 
-    def evaluate_performance(self,equity, trades, set_name="Validation"):
+    def evaluate_performance(self, equity, trades, set_name="Validation"):
         """Calculate performance metrics"""
         returns = np.diff(equity) / equity[:-1]
         sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
-        max_dd = max((peak - val) / peak for peak, val in zip(np.maximum.accumulate(equity), equity))
+        max_dd = max(
+            (peak - val) / peak
+            for peak, val in zip(np.maximum.accumulate(equity), equity)
+        )
         win_rate = np.mean(np.array(trades) > 0) if trades else 0
 
         print(f"\n{set_name} Performance:")
@@ -584,22 +682,36 @@ class XGBoostTradingModel:
         print(f"Win Rate: {win_rate:.2%}")
 
         return {
-            'sharpe': sharpe,
-            'max_drawdown': max_dd,
-            'num_trades': len(trades),
-            'win_rate': win_rate
+            "sharpe": sharpe,
+            "max_drawdown": max_dd,
+            "num_trades": len(trades),
+            "win_rate": win_rate,
         }
-        
+
 
 def plot_signals(df, signals):
     plt.figure(figsize=(14, 6))
-    plt.plot(df['close'], label='Price', alpha=0.6)
+    plt.plot(df["close"], label="Price", alpha=0.6)
 
     buy_signals = df.iloc[np.where(signals == 2)]
     sell_signals = df.iloc[np.where(signals == 0)]
 
-    plt.scatter(buy_signals.index, buy_signals['close'], marker='^', color='green', label='Buy Signal', s=50)
-    plt.scatter(sell_signals.index, sell_signals['close'], marker='v', color='red', label='Sell Signal', s=50)
+    plt.scatter(
+        buy_signals.index,
+        buy_signals["close"],
+        marker="^",
+        color="green",
+        label="Buy Signal",
+        s=50,
+    )
+    plt.scatter(
+        sell_signals.index,
+        sell_signals["close"],
+        marker="v",
+        color="red",
+        label="Sell Signal",
+        s=50,
+    )
 
     plt.title("Buy and Sell Signals")
     plt.xlabel("Date")
@@ -610,55 +722,105 @@ def plot_signals(df, signals):
     plt.show()
 
 
+# def main():
+#     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
+#     model = XGBoostTradingModel()
+#     train , test = model.load_csv(dataset_path)
+#     test_feat = model.prepare_features(test)
+# test_feat = model.normalize_data(test_feat, SCALING_PATH)
+# X_test = test_feat.drop(columns=['target'])
+# y_test = test_feat["target"]
+#  # Prepare metrics storage
+# all_fold_results = []
+
+# # Use TimeSeriesSplit
+# tscv = TimeSeriesSplit(n_splits=5)
+# for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(train)):
+#     print(f"\n=== Fold {fold_idx + 1} ===")
+#     train_df = train.iloc[train_idx].copy()
+#     val_df = train.iloc[val_idx].copy()
+
+#     # Feature prep
+#     train_feat = model.prepare_features(train_df)
+#     val_feat = model.prepare_features(val_df)
+
+#     # Normalize
+#     train_feat = model.normalize_data(train_feat)
+#     val_feat = model.normalize_data(val_feat, SCALING_PATH)
+
+#     # Setup for training
+#     model.features = train_feat.columns.tolist()
+#     X_train = train_feat.drop(columns=["target"])
+#     y_train = train_feat["target"]
+#     X_val = val_feat.drop(columns=["target"])
+#     y_val = val_feat["target"]
+
+#     # Train
+#     model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+
+#     # Predict and Evaluate
+#     signals = model.predict_signals(X_val.values)
+#     model.evaluate_model_performance(y_val, signals, f"Validation Fold {fold_idx+1}")
+#     equity, trades, trade_dates = model.backtest(val_df, signals)
+#     fold_results = model.evaluate_performance(equity, trades, f"Validation Fold {fold_idx+1}")
+#     all_fold_results.append(fold_results)
+
+#     # Optional: Save model per fold
+#     model.save_model(fold=fold_idx + 1)
+
+# # Convert results to DataFrame
+# results_df = pd.DataFrame(all_fold_results)
+# print("\n=== Cross-Validation Summary ===")
+# print(results_df.describe())
+
+# # Save overall results
+# results_df.to_csv(f"{RESULTS_DIR}/cv_fold_metrics.csv", index=False)
+
+# # Test set
+# signals = model.predict_signals(X_test.values)
+# model.evaluate_model_performance(y_test, signals, "Test")
+# equity, trades, trade_dates = model.backtest(test, signals)
+# test_results = model.evaluate_performance( equity, trades,"Test")
+
+# # Save model
+# model.save_model()
+
+#  # Evaluate performance
+# model.evaluate_performance(equity, trades,"Test")
+
+
 def main():
     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
     model = XGBoostTradingModel()
-    train , val , test = model.load_csv(dataset_path)
-    # train, val, test = model.train_val_test_split(df)
-    
-    # Prepare features (now returns DataFrames)
-    train_feat = model.prepare_features(train)
-    val_feat = model.prepare_features(val)
-    test_feat = model.prepare_features(test)
+    df_train, df_test = model.load_csv(dataset_path)
 
-    # Set the features list for scaling
-    # model.features = train_feat.columns.tolist()
+    # Save plots to "plots/" folder
+    anova_results = model.prepare_features(df_train, plot_dir="plots")
+    most_common_window, best_per_feature = model.select_best_common_window(
+        anova_results,
+        [
+            "Exchange_whale_ratio",
+            "Taker_buy_ratio",
+            "Coinbase_premium_gap",
+            "Coinbase_premium_index",
+            "exchange_supply_ratio",
+            "miner_supply_ratio",
+            "Addresses_count_active",
+            "Addresses_count_outflow",
+            "transactions_count_outflow",
+            "Tokens_transferred_total",
+            "short_liquidations",
+            "short_liquidations_usd",
+            "long_liquidations",
+            "long_liquidations_usd",
+        ],
+    )
+    print(f"Most common best window size: {most_common_window}")
 
-    # Normalize data
-    train_feat = model.normalize_data(train_feat)
-    val_feat = model.normalize_data(val_feat, SCALING_PATH)
-    test_feat = model.normalize_data(test_feat, SCALING_PATH)
-    
-    # Run tuning
-    # grid_search = model.tune_hyperparameters(X_train.values, y_train, X_val.values, y_val)
-    
-    # Train with proper feature names
-    model.features = train_feat.columns.tolist()
-    X_train = train_feat.drop(columns=['target'])
-    y_train = train_feat["target"]
-    X_val = val_feat.drop(columns=['target'])
-    y_val = val_feat["target"]
-    X_test = test_feat.drop(columns=['target'])
-    y_test = test_feat["target"]
-    model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+    print("\nANOVA Results (sorted by p-value):")
+    print(anova_results)
+    anova_results.to_csv("anova_results.csv", index=False)
 
-    # Validation set
-    signals = model.predict_signals(X_val.values)
-    model.evaluate_model_performance(y_val, signals, "Validation")
-    equity, trades, trade_dates = model.backtest(val, signals)
-    val_results = model.evaluate_performance(equity, trades,"Validation")
-    
-    # Test set
-    signals = model.predict_signals(X_test.values)
-    model.evaluate_model_performance(y_test, signals, "Test")
-    equity, trades, trade_dates = model.backtest(test, signals)
-    test_results = model.evaluate_performance( equity, trades,"Test")
-    
-    # Save model
-    model.save_model()
-
-     # Evaluate performance
-    model.evaluate_performance(equity, trades,"Test")
 
 if __name__ == "__main__":
     main()

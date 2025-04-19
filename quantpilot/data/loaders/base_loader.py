@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
 import os
+import time
 from typing import Dict, Optional
 import numpy as np
 import pandas as pd
@@ -8,6 +8,8 @@ import pandas as pd
 from quantpilot.data.api.api_client import APIClient
 from quantpilot.data.constant.data_source import data_source
 
+OUTPUT_DIR = "output"
+                
 class BaseLoader(ABC):
     """
     BaseLoader is an abstract class that serves as a template for loading data from a specific data source. 
@@ -63,8 +65,8 @@ class BaseLoader(ABC):
         :param datasource: The name of the data source.
         :param metrics: The metric name for the file naming.
         """
-        output_path = f"output/{datasource}_{metrics}_processed.csv"  # File path for the output CSV
-        os.makedirs("output", exist_ok=True)  # Create output directory if it doesn't exist
+        os.makedirs(OUTPUT_DIR, exist_ok=True) # Create output directory if it doesn't exist
+        output_path = f"{OUTPUT_DIR}/{datasource}_{metrics}_processed.csv"  # File path for the output CSV
         self.get_data().to_csv(output_path)  # Save the cleaned data to CSV
     
     def merge_csv(self, datasource: str, metrics: list[str]) -> None:
@@ -79,7 +81,6 @@ class BaseLoader(ABC):
 
         for df_name, df in self.dataframes.items():
             try:
-                df.set_index("datetime", inplace=True)  # Set 'datetime' as the index for merging
                 # Merge DataFrames
                 if merged_df is None:
                     merged_df = df
@@ -96,7 +97,8 @@ class BaseLoader(ABC):
         merged_df.reset_index(inplace=True)  # Reset the index after merging
 
         # Generate the output path for the merged file
-        merged_output_path = f"output/{datasource}_{datetime.now()}_merged.csv"
+        os.makedirs(f"{OUTPUT_DIR}", exist_ok=True)  
+        merged_output_path = f"{OUTPUT_DIR}/merged_{datasource}_{int(time.time())}.csv"
         merged_df.to_csv(merged_output_path, index=False)  # Save the merged DataFrame to CSV
         print(f"CSV saved to {merged_output_path}")
         
@@ -104,9 +106,6 @@ class BaseLoader(ABC):
         merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
         merged_df = merged_df.where(pd.notnull(merged_df), None)  # Replace NaN with None
         
-        # Ensure 'datetime' is of type string
-        merged_df["datetime"] = merged_df["datetime"].astype(str)
-
         # Return a sample of the merged data as a dictionary
         return merged_df
     

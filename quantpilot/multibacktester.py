@@ -1,6 +1,6 @@
+import os
 from typing import List, Dict, Optional
 import pandas as pd
-import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 from .backtester import Backtester  
@@ -89,7 +89,10 @@ class Multibacktester:
             }
             self.results_summary = results_summary
                 
+            
+        
         return results_summary
+    
 
     def plot_permutation_heatmap(self, metric: str = "Sharpe Ratio", save_path: Optional[str] = None, show_plot: bool = True):
         """

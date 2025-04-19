@@ -33,42 +33,24 @@ from joblib import dump, load
 from .datasets import TimeSeriesDataset
 from torch.utils.data import DataLoader
 from ..constants import (
-    ASSUMPTION_1,
-    ASSUMPTION_2,
-    ASSUMPTION_3,
-    ASSUMPTION_4,
-    ASSUMPTION_5,
-    ASSUMPTION_6,
-    ASSUMPTION_7,
-    ASSUMPTION_8,
+    ASSUMPTION_9,
 )
 
 from ray import tune, train
 from ray.tune.schedulers import ASHAScheduler
 from ray.train import Checkpoint
 import os
+from sklearn.model_selection import TimeSeriesSplit
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 TCN_DIR = os.path.dirname(CURRENT_DIR)
 MODELING_DIR = os.path.dirname(TCN_DIR)
 BASE_DIR = os.path.dirname(MODELING_DIR)
 
-assumption_map = {
-    "ASSUMPTION_1": ASSUMPTION_1,
-    "ASSUMPTION_2": ASSUMPTION_2,
-    "ASSUMPTION_3": ASSUMPTION_3,
-    "ASSUMPTION_4": ASSUMPTION_4,
-    "ASSUMPTION_5": ASSUMPTION_5,
-    "ASSUMPTION_6": ASSUMPTION_6,
-    "ASSUMPTION_7": ASSUMPTION_7,
-    "ASSUMPTION_8": ASSUMPTION_8,
-}
 
 # --- Read from env if available ---
-WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 30))
-ASSUMPTION_NAME = os.getenv("ASSUMPTION", "ASSUMPTION_1")
-ASSUMPTION = assumption_map[ASSUMPTION_NAME]
-OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", ASSUMPTION_NAME, str(WINDOW_SIZE))
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 120))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", "ASSUMPTION_9", str(WINDOW_SIZE))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Define search space for hyperparameters
@@ -99,7 +81,7 @@ def optimizer_creator(model, trial):
 
 
 def prepare_features(df):
-    df = df[ASSUMPTION].copy()
+    df = df[ASSUMPTION_9].copy()
     df = df.dropna()  # Drop rows with NaN values
     df = df.reset_index(drop=True)  # Reset index after dropping rows
 
@@ -137,15 +119,13 @@ def load_csv(df_path):
     df = df.dropna()
 
     # Split by year
-    df_train = df[df["year"].between(2020, 2022)].copy()
-    df_val = df[df["year"] == 2023].copy()
+    df_train = df[df["year"] < 2024].copy()
     df_test = df[df["year"] >= 2024].copy()
 
     df_train = df_train.drop(columns=["datetime", "year"], axis=1)
-    df_val = df_val.drop(columns=["datetime", "year"], axis=1)
     df_test = df_test.drop(columns=["datetime", "year"], axis=1)
 
-    return df_train, df_val, df_test
+    return df_train, df_test
 
 
 # --- Normalize ---
@@ -247,10 +227,11 @@ def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
     signals = []
     for p in probs:
         p = np.array(p)
-        if p[0] > buy_thresh:
-            signals.append(BUY_SIGNAL)  # Buy
-        elif p[2] > sell_thresh:
-            signals.append(SELL_SIGNAL)  # Sell
+        # Apply threshold rules
+        if p[0] > buy_thresh and p[2] <= sell_thresh:
+            signals.append(SELL_SIGNAL)  # Buy
+        elif p[2] > sell_thresh and p[0] <= buy_thresh:
+            signals.append(BUY_SIGNAL)  # Sell
         else:
             signals.append(HOLD_SIGNAL)  # Hold
     return np.array(signals)
@@ -453,121 +434,116 @@ def train_tune(config):
         MODELING_DIR, "datasets/btc_data_with_target_latest_v2.csv"
     )
     # --- Load CSV ---
-    raw_df_train, raw_df_val, raw_df_test = load_csv(dataset_path)
-    # --- Prepare features ---
-    df_train = prepare_features(raw_df_train)
-    df_val = prepare_features(raw_df_val)
-    df_test = prepare_features(raw_df_test)
-    # # --- Normalize ---
-    scaled_train = normalize_data(
-        df_train,
-        previous_scaling=False,
+    raw_df_train, _ = load_csv(dataset_path)
+    # --- Prepare full features and normalize ---
+    df_full = prepare_features(raw_df_train)
+    scaled_full = normalize_data(
+        df_full, previous_scaling=False,
         scaling_path=os.path.join(OUTPUT_DIR, SCALING_PATH),
     )
-    scaled_val = normalize_data(
-        df_val, previous_scaling=os.path.join(OUTPUT_DIR, SCALING_PATH)
-    )
-    scaled_test = normalize_data(
-        df_test, previous_scaling=os.path.join(OUTPUT_DIR, SCALING_PATH)
-    )
-    # # --- Preprocess data ---
-    X_train, y_train = preprocess_data(scaled_train)
-    X_val, y_val = preprocess_data(scaled_val)
-    X_test, y_test = preprocess_data(scaled_test)
-    # --- Convert to Torch tensors and DataLoaders ---
-    train_dataset = TimeSeriesDataset(X_train, y_train)
-    val_dataset = TimeSeriesDataset(X_val, y_val)
-    test_dataset = TimeSeriesDataset(X_test, y_test)
+    X, y = preprocess_data(scaled_full)
+    # --- TimeSeriesSplit Cross-Validation ---
+    tscv = TimeSeriesSplit(n_splits=5)
+    fold_metrics_list = []
+    for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(X)):
+        X_train, y_train = X[train_idx], y[train_idx]
+        X_val, y_val = X[val_idx], y[val_idx]
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+        # Create datasets and dataloaders
+        train_loader = DataLoader(TimeSeriesDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=False)
+        val_loader = DataLoader(TimeSeriesDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False)
 
-    # Create model and optimizer based on the current config
-    input_features = X_train.shape[2]  # Get input features dynamically
-    num_channels = [config[f"num_channels_{i}"] for i in range(3)]
-    model = TCNClassifier(input_features, 3, num_channels)
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"]
-    )
-    class_weights = calculate_class_distribution(y_train)
-    loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
+        # Init model
+        input_features = X.shape[2]
+        num_channels = [config[f"num_channels_{i}"] for i in range(3)]
+        model = TCNClassifier(input_features, 3, num_channels)
+        optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
+        class_weights = calculate_class_distribution(y_train)
+        loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-    checkpoint = train.get_checkpoint()
-    if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            checkpoint_dict = torch.load(os.path.join(checkpoint_dir, "checkpoint.pt"))
-            start = checkpoint_dict["epoch"] + 1
-            model.load_state_dict(checkpoint_dict["model_state"])
+        checkpoint = train.get_checkpoint()
+        if checkpoint:
+            with checkpoint.as_directory() as checkpoint_dir:
+                checkpoint_dict = torch.load(os.path.join(checkpoint_dir, "checkpoint.pt"))
+                model.load_state_dict(checkpoint_dict["model_state"])
 
-    for epoch in range(EPOCHS):
-        model.train()
-        total_loss = 0
-        for batch_x, batch_y in train_loader:
-            optimizer.zero_grad()
-            logits = model(batch_x)
-            loss = loss_criterion(logits, batch_y)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+        # Training
+        for epoch in range(EPOCHS):
+            model.train()
+            for batch_x, batch_y in train_loader:
+                optimizer.zero_grad()
+                logits = model(batch_x)
+                loss = loss_criterion(logits, batch_y)
+                loss.backward()
+                optimizer.step()
 
-        # Validation loop
+        # Validation + Metrics
         model.eval()
-        val_loss = 0
-        correct = 0
-        total = 0
+        all_preds, all_targets = [], []
         with torch.no_grad():
             for val_x, val_y in val_loader:
                 val_preds = model(val_x)
-                loss = loss_criterion(val_preds, val_y)
-                val_loss += loss.item() * val_x.size(0)
                 _, predicted = torch.max(val_preds.data, 1)
-                total += val_y.size(0)
-                correct += (predicted == val_y).sum().item()
+                all_preds.extend(predicted.cpu().numpy())
+                all_targets.extend(val_y.cpu().numpy())
 
-        avg_train_loss = total_loss / len(train_loader)
-        avg_val_loss = val_loss / total
-        val_accuracy = 100 * correct / total
+        y_true, y_pred = np.array(all_targets), np.array(all_preds)
 
-        print(
-            f"[DEBUG] Reporting to Ray Tune: val_accuracy={val_accuracy}, val_loss={avg_val_loss}"
+        fold_metrics = {
+            "fold": fold_idx + 1,
+            "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
+            "precision_macro": precision_score(y_true, y_pred, average="macro"),
+            "recall_macro": recall_score(y_true, y_pred, average="macro"),
+            "f1_macro": f1_score(y_true, y_pred, average="macro"),
+            "precision_weighted": precision_score(y_true, y_pred, average="weighted"),
+            "recall_weighted": recall_score(y_true, y_pred, average="weighted"),
+            "f1_weighted": f1_score(y_true, y_pred, average="weighted"),
+        }
+        fold_metrics_list.append(fold_metrics)
+        print(f"[Fold {fold_idx+1}] Metrics: {fold_metrics}")
+
+        # Save checkpoint for this fold
+        fold_checkpoint_dir = os.path.join(
+            OUTPUT_DIR, MODEL_CHECKPOINT_PATH, f"fold_{fold_idx+1}"
+        )
+        os.makedirs(fold_checkpoint_dir, exist_ok=True)
+        checkpoint_file = os.path.join(fold_checkpoint_dir, "checkpoint.pt")
+        torch.save(
+            {"epoch": EPOCHS, "model_state": model.state_dict()}, checkpoint_file
         )
 
-        # Report the validation accuracy to Ray Tune
-        if epoch % 5 == 0:
-            metrics = dict(val_accuracy=val_accuracy)
-            epoch_checkpoint_dir = os.path.join(
-                OUTPUT_DIR, MODEL_CHECKPOINT_PATH, f"epoch_{epoch}"
-            )
-            os.makedirs(epoch_checkpoint_dir, exist_ok=True)
-            checkpoint_file = os.path.join(epoch_checkpoint_dir, "checkpoint.pt")
-            print(f"Checkpoint File Directory: {checkpoint_file}")
-            try:
-                torch.save(
-                    {"epoch": epoch, "model_state": model.state_dict()}, checkpoint_file
-                )
-                print(f"Successfully saved checkpoint to {checkpoint_file}")
-            except Exception as e:
-                print(f"Failed to save checkpoint to {checkpoint_file}: {e}")
-            train.report(
-                metrics=metrics,
-                checkpoint=Checkpoint.from_directory(epoch_checkpoint_dir),
-            )
+    # --- Final Reporting ---
+    metrics_df = pd.DataFrame(fold_metrics_list)
+    metrics_df["config_id"] = config.get("trial_id", "unknown")
 
-        print(
-            f"Epoch {epoch + 1}/{EPOCHS} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f} - Val Acc: {val_accuracy:.2f}%"
-        )
+    # Save metrics DataFrame
+    metrics_csv_path = os.path.join(OUTPUT_DIR, MODEL_CHECKPOINT_PATH, "crossval_metrics.csv")
+    metrics_df.to_csv(metrics_csv_path, index=False)
+    print(f"[INFO] Saved cross-validation metrics to {metrics_csv_path}")
 
+    # Report average metrics to Ray Tune
+    mean_metrics = metrics_df.drop(columns=["fold", "config_id"]).mean().to_dict()
+    train.report(metrics=mean_metrics)
+
+    # Optional: Save last model again for Ray Tune checkpoint
+    final_checkpoint_dir = os.path.join(OUTPUT_DIR, MODEL_CHECKPOINT_PATH, "final_checkpoint")
+    os.makedirs(final_checkpoint_dir, exist_ok=True)
+    torch.save(
+        {"epoch": EPOCHS, "model_state": model.state_dict()},
+        os.path.join(final_checkpoint_dir, "checkpoint.pt"),
+    )
+    train.report(
+        checkpoint=Checkpoint.from_directory(final_checkpoint_dir)
+    )
 
 if __name__ == "__main__":
     dataset_path = os.path.join(
         MODELING_DIR, "datasets/btc_data_with_target_latest_v2.csv"
     )
     # --- Load CSV ---
-    raw_df_train, raw_df_val, raw_df_test = load_csv(dataset_path)
+    raw_df_train, raw_df_test = load_csv(dataset_path)
     # --- Prepare features ---
     df_train = prepare_features(raw_df_train)
-    df_val = prepare_features(raw_df_val)
     df_test = prepare_features(raw_df_test)
     # # --- Normalize ---
     scaled_train = normalize_data(
@@ -575,30 +551,24 @@ if __name__ == "__main__":
         previous_scaling=False,
         scaling_path=os.path.join(OUTPUT_DIR, SCALING_PATH),
     )
-    scaled_val = normalize_data(
-        df_val, previous_scaling=os.path.join(OUTPUT_DIR, SCALING_PATH)
-    )
     scaled_test = normalize_data(
         df_test, previous_scaling=os.path.join(OUTPUT_DIR, SCALING_PATH)
     )
     # # --- Preprocess data ---
     X_train, y_train = preprocess_data(scaled_train)
-    X_val, y_val = preprocess_data(scaled_val)
     X_test, y_test = preprocess_data(scaled_test)
     # --- Convert to Torch tensors and DataLoaders ---
     train_dataset = TimeSeriesDataset(X_train, y_train)
-    val_dataset = TimeSeriesDataset(X_val, y_val)
     test_dataset = TimeSeriesDataset(X_test, y_test)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Train model
     # Configure the Ray Tune experiment
 
     scheduler = ASHAScheduler(
-        metric="val_accuracy",
+        metric="balanced_accuracy",
         mode="max",
         max_t=50,
     )
@@ -613,13 +583,13 @@ if __name__ == "__main__":
 
     # Load the net with best configuration
     # Best Config focuses only on the best-performing hyperparameter configuration.
-    best_config = result.get_best_config(metric="val_accuracy", mode="max")
+    best_config = result.get_best_config(metric="balanced_accuracy", mode="max")
     print("Best config: ", best_config)
     # Best Trial refers to the entire trial run with the best performance, including both the hyperparameters and the model results (e.g., validation accuracy, checkpoint, etc.).
-    best_trial = result.get_best_trial(metric="val_accuracy", mode="max", scope="all")
+    best_trial = result.get_best_trial(metric="balanced_accuracy", mode="max", scope="all")
     print("Best Trial: ", best_trial.config)
     best_checkpoint = result.get_best_checkpoint(
-        best_trial, metric="val_accuracy", mode="max"
+        best_trial, metric="balanced_accuracy", mode="max"
     )
     print("Best Checkpoint: ", best_checkpoint)
     best_checkpoint_path = os.path.join(best_checkpoint.path, "checkpoint.pt")

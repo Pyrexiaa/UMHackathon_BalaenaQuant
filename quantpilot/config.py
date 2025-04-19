@@ -5,13 +5,17 @@ class BaseConfig:
 
 
 class TCNConfig:
-    TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
-    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaler.pkl"
+    TCN_MODEL_PATH = "/Users/jiayulim/Documents/GitHub/UMHackathon_BalaenaQuant/quantpilot/models_weights/tcn/checkpoint.pt"
+    # TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
+    # TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
+    TCN_SCALER_PATH = "/Users/jiayulim/Documents/GitHub/UMHackathon_BalaenaQuant/quantpilot/models_weights/tcn/scaler.pkl"
 
 
 class XGBConfig:
-    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost/xgboost_model.pkl"
-    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
+    # XGB_MODEL_PATH = "quantpilot/models_weights/xgboost/xgboost_model.pkl"
+    # XGB_SCALER_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
+    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_assumption_8/xgboost_model.pkl"
+    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_assumption_8//scaler.pkl"
     XGB_FEATURE_PATH = [
         "price_change_1",
         "ema_5_8_13_cross",

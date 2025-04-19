@@ -55,7 +55,7 @@ class DataLoader(BaseLoader):
 
         # If more than one metric is provided and merged is True, merge the data
         if len(metrics) > 1 and merged:
-            print("Merging data from multiple metrics...")
+            print("Merging data...")
             merged_df = self.merge_csv(self.datasource_key, metrics)
             self.data = merged_df
     
@@ -83,10 +83,10 @@ class DataLoader(BaseLoader):
             # Convert the data to a pandas DataFrame
             df = pd.DataFrame(data)
 
-            # If 'timestamp' column exists, convert it to datetime and set as index
-            if "timestamp" in df.columns:
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df.set_index("timestamp", inplace=True)
+            # If 'datetime' column exists, convert it to datetime and set as index
+            if "datetime" in df.columns:
+                df["datetime"] = pd.to_datetime(df["datetime"])
+                df.set_index("datetime", inplace=True)
 
             # Sort the data by the timestamp
             df.sort_index(inplace=True)

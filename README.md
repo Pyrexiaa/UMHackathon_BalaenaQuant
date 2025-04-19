@@ -1,11 +1,16 @@
 # QuantPilot
 
-## Project Overview
-QuantPilot is a high-performance, modular framework tailored for developing, backtesting, and evaluating trading strategies. It is built to support systematic strategy research using both traditional and machine learning-based approaches. With a flexible architecture and seamless integration across modules, QuantPilot empowers researchers and traders to rapidly iterate, test, and deploy alpha-generating ideas with real-world constraints and metrics.
+## 🚀 Project Overview
+QuantPilot is a high-performance, modular backtesting library tailored for designing, evaluating, and refining trading strategies. Built with flexibility in mind, it supports both traditional quantitative methods and cutting-edge machine learning techniques.
+
+With a composable architecture and seamless component integration, QuantPilot empowers quantitative researchers and traders to prototype, test, and deploy alpha-generating strategies efficiently—while accounting for real-world constraints and robust evaluation metrics.
 
 
-## Key Features
-
+## 🔑 Key Features
+- Plug-and-Play Architecture – Effortlessly integrate models, features, metrics, and more.
+- Modular and Composable Design – Construct fully customizable pipelines to suit your research workflows.
+- Backtesting & Forward Testing – Validate strategies with historical data and live-simulated environments.
+- ML-Ready Integration – Built-in support for training, evaluating, and deploying ML-based models.
 
 
 ## Getting Started
@@ -61,7 +66,7 @@ QuantPilot/
 └── README.md                           # Main project documentation and setup guide
 ```
 
-## Usage
+## 🛠️ Example Usage
 
 ```python
 from quantpilot.backtester import Backtester
@@ -74,7 +79,7 @@ if __name__ == "__main__":
     bt.plot_results()
 ```
 
-### Output
+## 📊 Sample Output
 ```
 ============================================================
                  BACKTEST PHASE PERFORMANCE                 
@@ -122,12 +127,13 @@ Trade Frequency (trades/day)  7.23
 ============================================================
 ```
 
-## Architecture Diagram
+## 🧩 Architecture Diagram
 ![alt text](architecture-diagram.jpeg)
 
-## Documentation
-</br>
-Detailed documentation is available in [docs](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/tree/main/docs)
+## 📚 Documentation
+Full documentation and user guides can be found in the [docs folder](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/tree/main/docs).
+
+
 
 
 

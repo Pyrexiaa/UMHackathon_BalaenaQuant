@@ -43,9 +43,10 @@ class XGBoostModel(BaseModel):
 
     def prepare_features(self, df):
         required_features = [
-            'exchange_whale_ratio',
-            'taker_buy_ratio'
-        ]
+    "tokens_transferred_mean",
+    "tokens_transferred_median",
+    "tokens_transferred_total",
+]
         
         # Check for missing features
         missing_features = [f for f in required_features if f not in df.columns]
