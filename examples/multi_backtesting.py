@@ -1,30 +1,16 @@
 from quantpilot.visualization.run import run_dashboard
 from sample_data import BTC_DATA
-from quantpilot.strategy import MLStrategy, HMMStrategy, CombinedStrategy
+from quantpilot.strategy import MLStrategy
 from quantpilot.multibacktester import Multibacktester
 from quantpilot.models import get_model
 
-
 bt = Multibacktester(
     data=BTC_DATA,
-    strategies=[
-        MLStrategy(get_model("XGBoost")),
-        HMMStrategy(),
-        CombinedStrategy(
-            ml_strategy=MLStrategy(get_model("XGBoost")),
-            hmm_strategy=HMMStrategy(),
-            method="and"
-        ),
-        CombinedStrategy(
-            ml_strategy=MLStrategy(get_model("XGBoost")),
-            hmm_strategy=HMMStrategy(),
-            method="vote"
-        ),
-    ],
-    strategy_names=["XGBoost", "HMM", "Combined (AND)", "Combined (Vote)"],
+    strategies=[MLStrategy(get_model("TCN")), MLStrategy(get_model("XGBoost")), 
+                MLStrategy(get_model("tabnet")), MLStrategy(get_model("gnn"))],
+    strategy_names=["TCN", "XGBoost", "TabNet", "GNN"],
     mode="geometric", 
-    entry_exit_logic="mean_reversion",
-    threshold_values=[0.35, None, 0.35, 0.35],
+    entry_exit_logic="mean_reversion"
 )
 
 # bt.run_all(backtest_end_date="2023-12-31")  # Run backtest only

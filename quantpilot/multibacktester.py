@@ -58,6 +58,8 @@ class Multibacktester:
         results_summary = {}
 
         # for name, strategy in zip(self.strategy_names, self.strategies):
+        if self.threshold_values is None:
+            self.threshold_values = [None] * len(self.strategies)
         for name, strategy, threshold in zip(self.strategy_names, self.strategies, self.threshold_values):
             print(f"\nRunning backtest for: {name}")
             bt = Backtester(

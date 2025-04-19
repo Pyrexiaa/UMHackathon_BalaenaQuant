@@ -19,9 +19,21 @@ class XGBoostModel(BaseModel):
             # Extract the actual XGBoost model
             self.model = model_data['model']
             self.scaler = model_data['scaler']
-            self.features = ASSUMPTION_10.copy()
-            if "target" in self.features:
-                self.features.remove("target")
+            # self.features = ASSUMPTION_10.copy()
+            # if "target" in self.features:
+            #     self.features.remove("target")
+            self.features = [
+                'taker_buy_ratio',
+                'taker_sell_ratio',
+                'coinbase_premium_gap_usdt_adjusted',
+                'coinbase_premium_index_usdt_adjusted',
+                'exchange_supply_ratio',
+                'addresses_count_active',
+                'tokens_transferred_mean',
+                'short_liquidations_usd',
+                'long_liquidations',
+                'long_liquidations_usd'
+            ]
         
         except Exception as e:
             print(f"Failed to load model: {e}")
@@ -41,9 +53,21 @@ class XGBoostModel(BaseModel):
         self.optimal_sell_thresh = None
 
     def prepare_features(self, df):
-        required_features = ASSUMPTION_10.copy()
-        if "target" in self.features:
-                self.features.remove("target")
+        # required_features = ASSUMPTION_10.copy()
+        # if "target" in self.features:
+        #         self.features.remove("target")
+        required_features = [
+            'taker_buy_ratio',
+            'taker_sell_ratio',
+            'coinbase_premium_gap_usdt_adjusted',
+            'coinbase_premium_index_usdt_adjusted',
+            'exchange_supply_ratio',
+            'addresses_count_active',
+            'tokens_transferred_mean',
+            'short_liquidations_usd',
+            'long_liquidations',
+            'long_liquidations_usd'
+        ]
         
         # Check for missing features
         missing_features = [f for f in required_features if f not in df.columns]

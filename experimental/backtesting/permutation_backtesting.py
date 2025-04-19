@@ -6,18 +6,41 @@ from quantpilot.models import get_model
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+# runner = PermutationBacktester(
+#     data=BTC_DATA,
+#     strategy=MLStrategy(get_model("TCN")),
+#     threshold_values=[0.3, 0.4, 0.5],
+# )
+
+# runner.run_all()
+# runner.plot_permutation_heatmap(
+#     metric="Sharpe Ratio",
+#     show_plot=True,
+# )
+
+
+# Accumulate all strategy-permutation results
 all_heatmaps = []
 
-for strategy in ["TCN", "XGBoost"]:
+for strategy in [
+    # "TCN", 
+    "XGBoost"
+    # "tabnet",
+    # "gnn"
+    ]:
     print(f"Running permutation test for strategy: {strategy}")
     runner = PermutationBacktester(
         data=BTC_DATA,
         strategy=MLStrategy(get_model(strategy)),
         strategy_name=strategy,
-        threshold_values=[0.3, 0.4, 0.5],
+        threshold_values=[0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5],
+        mode="geometric",
+        entry_exit_logic="mean_reversion",
     )
 
-    runner.run_all()
+    runner.run_all(
+        backtest_end_date="2023-12-31"
+    )  # Run backtest only
 
     # Save individual + collect for combined plot
     df = runner.plot_permutation_heatmap(metric="Sharpe Ratio", show_plot=False)
