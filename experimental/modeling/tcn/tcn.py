@@ -46,24 +46,16 @@ BASE_DIR = os.path.dirname(MODELING_DIR)
 
 # --- Read from env if available ---
 WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 120))
-OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", "ASSUMPTION_9", str(WINDOW_SIZE))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output/tcn", "ASSUMPTION_10", str(WINDOW_SIZE))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Define search space for hyperparameters
-# raytune_config = {
-#     "lr": tune.loguniform(1e-4, 1e-2),
-#     "weight_decay": tune.loguniform(1e-5, 1e-3),
-#     "num_channels_0": tune.choice([32, 64, 128]),
-#     "num_channels_1": tune.choice([64, 128, 256]),
-#     "num_channels_2": tune.choice([32, 64, 128]),
-# }
-
 raytune_config = {
-    "lr": 1e-3,
-    "weight_decay": 1e-5,
-    "num_channels_0": 32,
-    "num_channels_1": 64,
-    "num_channels_2": 16,
+    "lr": tune.loguniform(1e-4, 1e-2),
+    "weight_decay": tune.loguniform(1e-5, 1e-3),
+    "num_channels_0": tune.choice([32, 64, 128]),
+    "num_channels_1": tune.choice([64, 128, 256]),
+    "num_channels_2": tune.choice([32, 64, 128]),
 }
 
 
