@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import pandas as pd
 from tabulate import tabulate
-from scipy.stats import pearsonr, kstest
+from scipy.stats import pearsonr, ttest_ind
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -386,11 +386,25 @@ class XGBoostTradingModel:
             # Prepare data
             feature_cols = [f for f in features if f != "target" and f in df.columns]
             if not feature_cols:
+                print(f"Skipping {assumption_name} - no valid features")
                 continue
                 
-            valid_df = df[feature_cols + ["target"]].dropna()
+            if "target" not in df.columns:
+                valid_df = df[feature_cols].dropna()
+            else:
+                valid_df = df[feature_cols + ["target"]].dropna()
+                
             if len(valid_df) < 10:  # Minimum sample size
+                print(f"Skipping {assumption_name} - not enough samples ({len(valid_df)})")
                 continue
+                
+            # Split into positive and negative target groups if target exists
+            if "target" in valid_df.columns:
+                pos_group = valid_df[valid_df["target"] > 0][feature_cols]
+                neg_group = valid_df[valid_df["target"] <= 0][feature_cols]
+            else:
+                pos_group = valid_df[feature_cols]
+                neg_group = pd.DataFrame(columns=feature_cols)
                 
             # Calculate statistics
             feature_stats = []
@@ -398,26 +412,34 @@ class XGBoostTradingModel:
             
             for feature in feature_cols:
                 try:
-                    # Normality test
-                    _, norm_p = kstest(valid_df[feature], 'norm')
+                    # T-test between positive and negative groups
+                    if len(pos_group) >= 2 and len(neg_group) >= 2:
+                        t_stat, ttest_p = ttest_ind(pos_group[feature], neg_group[feature])
+                    else:
+                        t_stat, ttest_p = np.nan, np.nan
                     
-                    # Correlation with target
-                    if len(valid_df[feature].unique()) > 1:
+                    # Correlation with target (if target exists)
+                    if "target" in valid_df.columns and len(valid_df[feature].unique()) > 1:
                         corr, corr_p = pearsonr(valid_df[feature], valid_df["target"])
                     else:
                         corr, corr_p = np.nan, np.nan
                     
-                    p_values.append(corr_p)
+                    # Use t-test p-value as primary metric
+                    p_values.append(ttest_p)
                     
                     feature_stats.append({
                         'feature': feature,
                         'mean': valid_df[feature].mean(),
                         'std': valid_df[feature].std(),
-                        'normality_p': norm_p,
+                        't_statistic': t_stat,
+                        't_test_p': ttest_p,
                         'correlation': corr,
-                        'correlation_p': corr_p
+                        'correlation_p': corr_p,
+                        'pos_mean': pos_group[feature].mean() if len(pos_group) > 0 else np.nan,
+                        'neg_mean': neg_group[feature].mean() if len(neg_group) > 0 else np.nan
                     })
                 except Exception as e:
+                    print(f"Error processing {feature} in {assumption_name}: {str(e)}")
                     p_values.append(np.nan)
                     feature_stats.append({
                         'feature': feature,
@@ -444,15 +466,28 @@ class XGBoostTradingModel:
             # ========================================
             plt.figure(figsize=(14, 8))
             for j, feature in enumerate(feature_cols):
-                sns.kdeplot(valid_df[feature], 
-                        label=f"{feature} (ρ={feature_stats[j].get('correlation', np.nan):.2f})",
-                        color=plt.cm.tab20(j),
-                        fill=True)
+                # Plot distribution for positive and negative groups if target exists
+                if "target" in valid_df.columns and len(pos_group) > 0 and len(neg_group) > 0:
+                    sns.kdeplot(pos_group[feature], 
+                            label=f"{feature} (Pos)", 
+                            color=plt.cm.tab20(j), 
+                            linestyle='--')
+                    sns.kdeplot(neg_group[feature], 
+                            label=f"{feature} (Neg)", 
+                            color=plt.cm.tab20(j))
+                else:
+                    sns.kdeplot(valid_df[feature], 
+                            label=feature,
+                            color=plt.cm.tab20(j))
             
-            plt.title(f"{assumption_name}\nMean p: {mean_p:.3f} | Median p: {median_p:.3f}", fontsize=14)
+            plot_title = f"{assumption_name}\nMean p: {mean_p:.3f} | Median p: {median_p:.3f}"
+            if "target" not in valid_df.columns:
+                plot_title += "\n(No target available for t-tests)"
+                
+            plt.title(plot_title, fontsize=14)
             plt.xlabel("Feature Value")
             plt.ylabel("Density")
-            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')  # FIXED HERE
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             
             individual_path = f"assumption_analysis/{assumption_name.replace(' ', '_')}.png"
@@ -464,10 +499,18 @@ class XGBoostTradingModel:
             # ========================================
             ax = plt.subplot(4, 2, i+1)
             for j, feature in enumerate(feature_cols):
-                sns.kdeplot(valid_df[feature], 
-                        label=feature,
-                        color=plt.cm.tab20(j),
-                        ax=ax)
+                if "target" in valid_df.columns and len(pos_group) > 0 and len(neg_group) > 0:
+                    sns.kdeplot(pos_group[feature], 
+                            color=plt.cm.tab20(j), 
+                            linestyle='--', 
+                            ax=ax)
+                    sns.kdeplot(neg_group[feature], 
+                            color=plt.cm.tab20(j), 
+                            ax=ax)
+                else:
+                    sns.kdeplot(valid_df[feature], 
+                            color=plt.cm.tab20(j), 
+                            ax=ax)
             
             ax.set_title(f"{assumption_name}\n(avg p={mean_p:.2f})", fontsize=10)
             ax.set_xlabel("")
@@ -488,7 +531,7 @@ class XGBoostTradingModel:
         
         # Print summary
         print("\n" + "="*50)
-        print("ASSUMPTION STATISTICS SUMMARY")
+        print("ASSUMPTION STATISTICS SUMMARY (Using t-tests)")
         print("="*50)
         print(tabulate(
             stats_df[['assumption', 'mean_p_value', 'median_p_value', 
@@ -499,18 +542,20 @@ class XGBoostTradingModel:
             showindex=False
         ))
         
-        print("\n" + "="*50)
-        print("TOP FEATURES BY CORRELATION")
-        print("="*50)
-        for assumption in stats_df['assumption']:
-            print(f"\n{assumption}:")
-            df = details_df[details_df['assumption'] == assumption]
-            print(tabulate(
-                df.sort_values('correlation_p')[['feature', 'correlation', 'correlation_p']],
-                headers=['Feature', 'Correlation', 'p-value'],
-                tablefmt='grid',
-                floatfmt=".4f"
-            ))
+        if "target" in df.columns:
+            print("\n" + "="*50)
+            print("TOP FEATURES BY T-TEST SIGNIFICANCE")
+            print("="*50)
+            for assumption in stats_df['assumption']:
+                print(f"\n{assumption}:")
+                df = details_df[details_df['assumption'] == assumption]
+                print(tabulate(
+                    df.sort_values('t_test_p')[['feature', 't_statistic', 't_test_p', 
+                                            'pos_mean', 'neg_mean']],
+                    headers=['Feature', 't-stat', 'p-value', 'Pos Mean', 'Neg Mean'],
+                    tablefmt='grid',
+                    floatfmt=".4f"
+                ))
         
         print("\n" + "="*50)
         print(f"Saved plots to: {os.path.abspath('assumption_analysis')}")
@@ -529,8 +574,6 @@ class XGBoostTradingModel:
                 "tokens_transferred_total",
             ]
             best_features = [f for f in original_features if f in df.columns]
-            # if not best_features:
-            #     raise ValueError("No valid features found in DataFrame")
         
         return df[best_features].dropna().reset_index(drop=True)
 

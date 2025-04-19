@@ -14,9 +14,11 @@ if __name__ == "__main__":
     
     # bt.run(backtest_end_date="2023-12-31") # Run backtest only
     bt.run(forward_test=True, forward_start_date="2024-01-01") # Run backtest and forward test
-  
-    bt.plot_results()
-    # run_dashboard()
+
+    # bt.plot_results()
+   
+    run_dashboard()
+    
 
     
     
