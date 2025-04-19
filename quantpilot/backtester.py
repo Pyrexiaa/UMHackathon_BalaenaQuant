@@ -1,5 +1,6 @@
 import json
 import os
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Optional, Tuple
@@ -180,17 +181,42 @@ class Backtester:
         )
         
         periods_metadata = {
-        key: {
-            'start': str(val['start']),
-            'end': str(val['end'])
-        } for key, val in self.periods.items()
-        
+            key: {
+                'start': str(val['start']),
+                'end': str(val['end'])
+            } for key, val in self.periods.items()
         }
 
-        with open(f'output/meta_{self.strategy_name.lower()}.json', 'w') as f:
-            json.dump(periods_metadata, f, indent=4)
+        # Add metrics to metadata before saving
+        periods_metadata["metrics"] = output["metrics"]
+
+
+        with open(f'output/meta_{self.strategy_name.lower()}.json', 'a') as f:
+            json.dump(self.convert_json_friendly(periods_metadata), f, indent=4)
+
         
         return output
+
+
+
+    def convert_json_friendly(self, obj):
+        if isinstance(obj, dict):
+            return {k: self.convert_json_friendly(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.convert_json_friendly(i) for i in obj]
+        elif isinstance(obj, (np.integer, np.floating)):
+            return obj.item()
+        elif isinstance(obj, (np.ndarray, pd.Series, pd.DataFrame)):
+            return obj.tolist()
+        elif isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        elif isinstance(obj, pd.Timedelta):
+            return obj.total_seconds() 
+        elif isinstance(obj, pd._libs.tslibs.nattype.NaTType):
+            return None
+        
+        return obj
+
 
     def _run_phase(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
