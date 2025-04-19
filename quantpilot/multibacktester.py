@@ -21,7 +21,7 @@ class Multibacktester:
         :param trading_fee: Trading fee for each transaction.
         :param qty_per_trade: Quantity per trade.
         :param mode: Mode of the strategy ('arithmetic' or 'geometric').
-        :param entry_exit_logic: Logic for entry and exit signals.
+        :param entry_exit_logic: Logic for entry and exit signals ('trend_following' or 'mean_reversion').
         :param output_dir: Directory to save output files.
         """
         self.data = data
