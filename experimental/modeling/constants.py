@@ -87,3 +87,17 @@ ASSUMPTION_9 = [
     'long_liquidations_usd',
     'target'
 ]
+
+ASSUMPTION_10 = [
+    'taker_buy_ratio',
+    'taker_sell_ratio',
+    'coinbase_premium_gap_usdt_adjusted',
+    'coinbase_premium_index_usdt_adjusted',
+    'exchange_supply_ratio',
+    'addresses_count_active',
+    'tokens_transferred_mean',
+    'short_liquidations_usd',
+    'long_liquidations',
+    'long_liquidations_usd',
+    'target'
+]
