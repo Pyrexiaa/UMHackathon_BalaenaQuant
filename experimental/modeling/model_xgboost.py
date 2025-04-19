@@ -15,6 +15,7 @@ from joblib import dump, load
 import json
 from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
 from .constants import (ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
+from sklearn.model_selection import TimeSeriesSplit
 
 import sys
 
@@ -164,7 +165,7 @@ class XGBoostTradingModel:
             
         scores = []
         valid_windows = 0
-        total_windows = len(X) - window_size
+        total_windows = len(X) // window_size
 
         print(f"Testing with window={window_size}")
         print(f"Total windows to process: {total_windows}")
@@ -279,7 +280,7 @@ class XGBoostTradingModel:
         
         return signals
     
-    def save_model(self):
+    def save_model(self, fold=None):
         """Save model with optimization parameters"""
         model_data = {
             'model': self.model,
@@ -289,8 +290,12 @@ class XGBoostTradingModel:
             'optimal_sell_thresh': self.optimal_sell_thresh,
             'features': self.features
         }
-        joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")    
-        print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
+        if fold is not None:
+            joblib.dump(model_data, MODEL_DIR / f"xgboost_model_fold_{fold}.pkl")    
+            print(f"Model saved to {MODEL_DIR / f'xgboost_model_fold_{fold}.pkl'}")
+        else:
+            joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")    
+            print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
 
     def evaluate_model_performance(self, y_true, y_pred, set_name="Validation"):
             """
@@ -337,15 +342,13 @@ class XGBoostTradingModel:
         # df = df.dropna()
 
         # Split by year
-        df_train = df[df["year"].between(2020, 2022)].copy()
-        df_val = df[df["year"] == 2023].copy()
+        df_train = df[df["year"] < 2024].copy()
         df_test = df[df["year"] >= 2024].copy()
 
         df_train = df_train.drop(columns=["datetime", "year"], axis=1)
-        df_val = df_val.drop(columns=["datetime", "year"], axis=1)
         df_test = df_test.drop(columns=["datetime", "year"], axis=1)
 
-        return df_train, df_val, df_test
+        return df_train, df_test
 
     def train_val_test_split(self, df):
         return (
@@ -613,41 +616,57 @@ def plot_signals(df, signals):
 def main():
     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
     model = XGBoostTradingModel()
-    train , val , test = model.load_csv(dataset_path)
-    # train, val, test = model.train_val_test_split(df)
-    
-    # Prepare features (now returns DataFrames)
-    train_feat = model.prepare_features(train)
-    val_feat = model.prepare_features(val)
+    train , test = model.load_csv(dataset_path)
     test_feat = model.prepare_features(test)
-
-    # Set the features list for scaling
-    # model.features = train_feat.columns.tolist()
-
-    # Normalize data
-    train_feat = model.normalize_data(train_feat)
-    val_feat = model.normalize_data(val_feat, SCALING_PATH)
     test_feat = model.normalize_data(test_feat, SCALING_PATH)
-    
-    # Run tuning
-    # grid_search = model.tune_hyperparameters(X_train.values, y_train, X_val.values, y_val)
-    
-    # Train with proper feature names
-    model.features = train_feat.columns.tolist()
-    X_train = train_feat.drop(columns=['target'])
-    y_train = train_feat["target"]
-    X_val = val_feat.drop(columns=['target'])
-    y_val = val_feat["target"]
     X_test = test_feat.drop(columns=['target'])
     y_test = test_feat["target"]
-    model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+     # Prepare metrics storage
+    all_fold_results = []
 
-    # Validation set
-    signals = model.predict_signals(X_val.values)
-    model.evaluate_model_performance(y_val, signals, "Validation")
-    equity, trades, trade_dates = model.backtest(val, signals)
-    val_results = model.evaluate_performance(equity, trades,"Validation")
-    
+    # Use TimeSeriesSplit
+    tscv = TimeSeriesSplit(n_splits=5)
+    for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(train)):
+        print(f"\n=== Fold {fold_idx + 1} ===")
+        train_df = train.iloc[train_idx].copy()
+        val_df = train.iloc[val_idx].copy()
+
+        # Feature prep
+        train_feat = model.prepare_features(train_df)
+        val_feat = model.prepare_features(val_df)
+
+        # Normalize
+        train_feat = model.normalize_data(train_feat)
+        val_feat = model.normalize_data(val_feat, SCALING_PATH)
+
+        # Setup for training
+        model.features = train_feat.columns.tolist()
+        X_train = train_feat.drop(columns=["target"])
+        y_train = train_feat["target"]
+        X_val = val_feat.drop(columns=["target"])
+        y_val = val_feat["target"]
+
+        # Train
+        model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+
+        # Predict and Evaluate
+        signals = model.predict_signals(X_val.values)
+        model.evaluate_model_performance(y_val, signals, f"Validation Fold {fold_idx+1}")
+        equity, trades, trade_dates = model.backtest(val_df, signals)
+        fold_results = model.evaluate_performance(equity, trades, f"Validation Fold {fold_idx+1}")
+        all_fold_results.append(fold_results)
+
+        # Optional: Save model per fold
+        model.save_model(fold=fold_idx + 1)
+
+    # Convert results to DataFrame
+    results_df = pd.DataFrame(all_fold_results)
+    print("\n=== Cross-Validation Summary ===")
+    print(results_df.describe())
+
+    # Save overall results
+    results_df.to_csv(f"{RESULTS_DIR}/cv_fold_metrics.csv", index=False)
+
     # Test set
     signals = model.predict_signals(X_test.values)
     model.evaluate_model_performance(y_test, signals, "Test")
