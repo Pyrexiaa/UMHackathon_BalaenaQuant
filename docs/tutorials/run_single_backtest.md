@@ -1,48 +1,82 @@
-## Run Backtest
+## Run Backtest Only or with Forward Test
+
+This guide shows you how to run **flexible backtests** and **forward tests** using the `Backtester` in QuantPilot.
+
+---
 
 ### Prerequisites
-Ensure you have:
-- Installed QuantPilot and its dependencies, refer to [README.md](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/?tab=readme-ov-file#quantpilot)
-- A working Python environment
-- Sample data or use the data ingestion module to retrieve data from datasource and transform into time series DataFrame (BTC_DATA in this example)
+- Installed QuantPilot and dependencies ([see setup](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/?tab=readme-ov-file#quantpilot))
+- A Python 3.8+ environment
+- Prepared time series dataset (e.g., `BTC_DATA`)
 
-### Step 1: Set Up Your Models and Strategies
-```py
+---
+
+### Step 1: Initialize Strategy and Backtester
+```python
 from quantpilot.models import get_model
 from quantpilot.strategy import MLStrategy
-
-# Initialize models and wrap them into strategies
-xgb_strategy = MLStrategy(get_model("XGBoost"))
-```
-
-### Step 2: Create and Configure the backtester
-```py
-from sample_data import BTC_DATA  # Your historical OHLCV or price dataset
 from quantpilot.backtester import Backtester
+from sample_data import BTC_DATA  # Your historical price data
 
-bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")), strategy_name="XGBoost",
-                    mode="geometric", entry_exit_logic="mean_reversion")
+bt = Backtester(
+    data=BTC_DATA,
+    strategy=MLStrategy(get_model("xgboost")),
+    strategy_name="XGBoost",
+    mode="geometric",
+    entry_exit_logic="mean_reversion"
+)
 ```
 
-### Step 3: Run All Backtests (with Optional Forward Testing)
-```py
+---
+
+### Step 2: Run Backtest Only (Flexible Options)
+```python
+# Run full backtest from beginning to end of dataset
+tbt.run()
+
+# Run backtest up to a specific end date
+bt.run(backtest_end_date="2023-12-31")
+
+# Run backtest within specific date range
+bt.run(backtest_start_date="2021-01-01", backtest_end_date="2022-12-21")
+
+# Run backtest for a fixed number of years from start
+tbt.run(backtest_years=3)
+```
+
+---
+
+### Step 3: Run Backtest + Forward Test (Flexible Options)
+```python
+# Run full backtest followed by forward test starting from a set date
 bt.run(forward_test=True, forward_start_date="2024-01-01")
+
+# Automatically split into backtest and 1-year forward test
+bt.run(forward_test=True, forward_years=1)
+
+# Specify forward test start and end dates
+bt.run(forward_test=True, forward_start_date="2024-01-01", forward_end_date="2025-01-31")
 ```
 
-### Optional: Plot Backtest Metrics
-```py
+---
+
+### Plot Results
+```python
 bt.plot_results()
 ```
 
-### Step 4: Launch the Streamlit Dashboard
-```py
-from quantpilot.visualization.run import run_dashboard
+---
 
-# Launch Streamlit app in your default browser
+### Launch Streamlit Dashboard
+```python
+from quantpilot.visualization.run import run_dashboard
 run_dashboard()
 ```
-### Final Outcome
-```Running backtest for: XGBoost
+
+---
+
+### Example Output
+```
 STRATEGY NAME: XGBoost
 Running backtest phase...
 Entry/Exit Logic: Mean Reversion
@@ -106,6 +140,6 @@ Results saved to output/portfolio_xgboost.csv
 Trades saved to output/trade_xgboost.csv
 Records saved to output/records_xgboost.csv
 ```
-### With Visualization
+### Visualization Example
 ![alt text](image-1.png)
 ![alt text](image.png)

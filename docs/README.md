@@ -7,6 +7,7 @@
 * [How to run backtest on single strategy](./tutorials/run_single_backtest.md)
 * [How to run backtest on multiple strategies](./tutorials/run_multiple_backtest.md)
 * [How to run complete backtesting pipeline](./tutorials/run_complete_pipeline.md)
+* [How to add custom strategy](./tutorials/add_custom_strategy.md)
 * [How to add custom model](./tutorials/add_custom_model.md)
 
 ### API Reference
