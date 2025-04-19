@@ -1,8 +1,11 @@
 import asyncio
 from datetime import datetime, timezone
-
+from quantpilot.backtester import Backtester
 from quantpilot.data import DataLoader  
+from quantpilot.strategy import MLStrategy
+from quantpilot.models import get_model
 from quantpilot.features import add_hmm_features, add_nlp_sentiment_score
+import pandas as pd
 
 async def main():
     loader = DataLoader()
@@ -19,7 +22,9 @@ async def main():
     df = add_hmm_features(df)
     df = add_nlp_sentiment_score(df)
     
-    df.to_csv('output_data.csv', index=False)
+    bt = Backtester(data=df, strategy=MLStrategy(get_model("TCN")))
+    bt.run(forward_test=True, forward_start_date="2024-01-01")
+    bt.plot_results()
 
 if __name__ == "__main__":
     asyncio.run(main())

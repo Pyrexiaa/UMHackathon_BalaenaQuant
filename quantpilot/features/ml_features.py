@@ -10,9 +10,24 @@ from sklearn.preprocessing import StandardScaler
 
 def add_hmm_features(
     ori_df: pd.DataFrame, 
-    feature_cols: List[str] = ["close", "volume"], 
+    feature_cols: List[str] = [
+        "addresses_count_active",          
+        "addresses_count_receiver",        
+        "addresses_count_sender",          
+        "fees_transaction_mean_usd",        
+        "miner_supply_ratio",              
+        "exchange_supply_ratio",            
+        "transactions_count_inflow",       
+        "transactions_count_outflow",      
+        "tokens_transferred_total",        
+        "exchange_whale_ratio",             
+        "coinbase_premium_index_usdt_adjusted", 
+        "coinbase_premium_gap_usdt_adjusted",  
+        "long_liquidations_usd",               
+        "short_liquidations_usd"               
+    ], 
     n_components: int = 3,
-    n_iter: int = 1000,
+    n_iter: int = 2000,
 ) -> pd.DataFrame:
     """
     Add HMM-based hidden state features to a DataFrame.
