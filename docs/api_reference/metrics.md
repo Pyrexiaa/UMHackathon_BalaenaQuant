@@ -71,23 +71,23 @@ class CustomMetrics(Metrics):
 |total_return()|	Total portfolio return over the period|
 |annualized_return()|	CAGR (Compounded Annual Growth Rate)|
 |annualized_volatility()|	Std. dev. of daily returns scaled to annual|
+|calmar_ratio()	|Annual return divided by absolute max drawdown|
 |sharpe_ratio()|	Measures risk-adjusted return (excess return / volatility)|
 |sortino_ratio()|	Like Sharpe, but penalizes only downside volatility|
 |max_drawdown()|	Largest peak-to-trough decline in equity|
-|calmar_ratio()	|Annual return divided by absolute max drawdown|
-|drawdown_duration()|	Longest number of bars equity stayed below peak|
-
 <br/>
 
 #### Trade-Level Metrics
 |Function	| Description|
 |--|--|
-|trade_metrics()|	Returns a dictionary of metrics derived from executed trades|
+| Number of Trades |	Returns the number of executed trades|
+| Long Trades |	Returns the number of long trades|
+| Short Trades |	Returns the number of short trades|
 | Win Rate	| Ratio of winning trades|
 | Expectancy	|Avg. expected PnL per trade|
 | Profit Factor	|Total profits ÷ total losses|
 | Avg Holding Period|	Mean duration of holding an asset|
-| Trade Frequency	|Number of trades per day|
+| Trade Frequency	|Number of trades per data row|
 
 
 

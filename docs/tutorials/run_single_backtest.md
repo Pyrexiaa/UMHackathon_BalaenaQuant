@@ -15,7 +15,7 @@ from quantpilot.strategy import MLStrategy
 xgb_strategy = MLStrategy(get_model("XGBoost"))
 ```
 
-### Step 2: Create and Configure the Multibacktester
+### Step 2: Create and Configure the backtester
 ```py
 from sample_data import BTC_DATA  # Your historical OHLCV or price dataset
 from quantpilot.backtester import Backtester

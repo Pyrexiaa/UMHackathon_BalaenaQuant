@@ -91,54 +91,57 @@ if __name__ == "__main__":
 ============================================================
                  BACKTEST PHASE PERFORMANCE                 
 ============================================================
-Start Date                    2020-03-13
-End Date                      2023-12-31
-Duration (days)               33276
+Start Date                    2020-03-13 02:00:00
+End Date                      2023-12-31 23:00:00
+Duration (days)               1388
+Data rows                     33183
 Initial Capital               $100,000.00
 Final Equity                  $268,437.59
 Total Return                  168.44%
 Annualized Return             34.52%
-Sharpe Ratio                  1.94
-Sortino Ratio                 2.13
-Max Drawdown                  -22.38%
 Calmar Ratio                  2.79
-Number of Trades              1320
-Win Rate                      0.63
+Sharpe Ratio                  1.94
+Sortino Ratio                 1.01
+Max Drawdown                  -12.38%
+Number of Trades              1020
+Long Trades                   63
+Short Trades                  542
+Win Rate                      0.77
 Average PnL                   127.88
 Expectancy                    102.34
 Profit Factor                 2.47
 Average Holding Period        2 days 06:45:00
-Trade Frequency (trades/day)  8.97
+Trade Frequency               0.11
 
 ============================================================
                FORWARD TEST PHASE PERFORMANCE               
 ============================================================
-Start Date                    2024-01-01
-End Date                      2025-03-31
-Duration (days)               456
+Start Date                    2024-01-01 00:00:00
+End Date                      2025-03-31 22:00:00
+Duration (days)               455
 Initial Capital               $100,000.00
 Final Equity                  $129,836.41
 Total Return                  29.84%
 Annualized Return             22.51%
+Calmar Ratio                  2.72
 Sharpe Ratio                  1.82
 Sortino Ratio                 1.89
 Max Drawdown                  -18.24%
-Calmar Ratio                  2.72
 Number of Trades              428
 Win Rate                      0.59
 Average PnL                   8.47
 Expectancy                    6.39
 Profit Factor                 1.91
 Average Holding Period        1 days 21:30:00
-Trade Frequency (trades/day)  7.23
+Trade Frequency               0.12
 ============================================================
 ```
 
 ## 🧩 Architecture Diagram
-![alt text](architecture-diagram.jpeg)
+![alt text](architecture_diagram.jpg)
 
 ## 📚 Documentation
-Full documentation and user guides can be found in the [docs folder](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/tree/main/docs).
+Full documentation and user guides can be found in [QuantPilot Docs](https://quantpilot.gitbook.io/docs).
 
 
 
