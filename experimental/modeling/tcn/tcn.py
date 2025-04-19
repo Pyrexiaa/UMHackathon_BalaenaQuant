@@ -247,10 +247,11 @@ def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
     signals = []
     for p in probs:
         p = np.array(p)
-        if p[0] > buy_thresh:
-            signals.append(BUY_SIGNAL)  # Buy
-        elif p[2] > sell_thresh:
-            signals.append(SELL_SIGNAL)  # Sell
+        # Apply threshold rules
+        if p[0] > buy_thresh and p[2] <= sell_thresh:
+            signals.append(SELL_SIGNAL)  # Buy
+        elif p[2] > sell_thresh and p[0] <= buy_thresh:
+            signals.append(BUY_SIGNAL)  # Sell
         else:
             signals.append(HOLD_SIGNAL)  # Hold
     return np.array(signals)
