@@ -6,9 +6,10 @@ class BaseConfig:
 
 class TCNConfig:
     TCN_MODEL_PATH = "quantpilot/models_weights/tcn/checkpoint.pt"
+    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
     # TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
     # TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
-    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
+    
 
 class TabNetConfig:
     TABNET_MODEL_PATH = "quantpilot/models_weights/tabnet/tabnet_fold1.zip"
@@ -16,48 +17,8 @@ class TabNetConfig:
     
 
 class XGBConfig:
-    # assumption 9 model
-    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost2/xgboost_model.pkl"
-    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost2/scaler.pkl"
-    
-    # assumption 10 model
-<<<<<<< HEAD
-    # XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final/xgboost_model.pkl"
-    # XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final/scaler.pkl"
-
     XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final_1/xgboost_model.pkl"
     XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final_1/scaler.pkl"
-
-    # XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final_testing/xgboost_model.pkl"
-    # XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final_testing/scaler.pkl"
-=======
-    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final/xgboost_model.pkl"
-    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final/scaler.pkl"
->>>>>>> c015e6e0b4a3506fdb9444f8d3c9112975c509f8
-
-    XGB_FEATURE_PATH = [
-        "price_change_1",
-        "ema_5_8_13_cross",
-        "taker_sell_ratio",
-        "taker_buy_ratio",
-        "taker_buy_sell_ratio",
-        "rsi_14",
-        "rsi_obv_signal_14",
-        "bb_signal_20",
-        "coinbase_premium_index_usdt_adjusted",
-        "macd_signal_flag",
-        "coinbase_premium_gap_usdt_adjusted",
-        "macd_trade_signal",
-        "macd",
-        "addresses_count_sender",
-        "addresses_count_active",
-        "blockreward",
-        "tokens_transferred_mean",
-        "long_liquidations",
-        "addresses_count_receiver",
-        "taker_sell_volume"
-    ]
-
 
 class CNNConfig:
     CNN_MODEL_PATH = "quantpilot/models_weights/cnn/model.pth"

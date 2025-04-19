@@ -1,42 +1,22 @@
-# model_tabnet.py
-
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import classification_report
 from sklearn.preprocessing import StandardScaler
 from pytorch_tabnet.tab_model import TabNetClassifier
 import torch
 import os
 import joblib
+from experimental.modeling.constants import ASSUMPTION_10
 
-# Set paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest_v2.csv"
 MODEL_SAVE_PATH = Path("quantpilot/models_weights/tabnet")
 
-# Configuration
-class BaseConfig:
-    WINDOW_SIZE = 120  # Rolling window size for prediction
-
-# Define the features to use
-SELECTED_FEATURES = [
-    'exchange_whale_ratio',
-    'taker_buy_ratio',
-    'coinbase_premium_gap',
-    'coinbase_premium_index',
-    'exchange_supply_ratio',
-    'miner_supply_ratio',
-    'addresses_count_active',
-    'addresses_count_outflow',
-    'transactions_count_outflow',
-    'tokens_transferred_total',
-    'short_liquidations',
-    'short_liquidations_usd',
-    'long_liquidations',
-    'long_liquidations_usd'
-]
+WINDOW_SIZE = 120
+SELECTED_FEATURES = ASSUMPTION_10.copy()
+SELECTED_FEATURES.remove("target")
 
 os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
 
@@ -74,13 +54,7 @@ def load_and_preprocess_data():
     return X_train_scaled, y_train, X_val_scaled, y_val, X_test_scaled, y_test
 
 def predict_signals(model, X):
-    """
-    Generate trading signals based on maximum probability class
-    Returns: 
-        -1 (Sell) if max probability is class 0
-        0 (Hold) if max probability is class 1 
-        1 (Buy) if max probability is class 2
-    """
+
     probs = model.predict_proba(X)
     signals = []
     
@@ -98,7 +72,7 @@ def predict_signals(model, X):
     
     return np.array(signals)
 
-def rolling_window_predict(model, X, window_size=BaseConfig.WINDOW_SIZE):
+def rolling_window_predict(model, X, window_size=WINDOW_SIZE):
     """Rolling window prediction"""
     signals = []
     for i in range(window_size, len(X)):
@@ -106,17 +80,15 @@ def rolling_window_predict(model, X, window_size=BaseConfig.WINDOW_SIZE):
         signal = predict_signals(model, window_data[-1:])[0]
         signals.append(signal)
     
-    # Pad with holds for initial period
     return np.concatenate([np.zeros(window_size), signals])
 
 def train_tabnet():
     X_train, y_train, X_val, y_val, X_test, y_test = load_and_preprocess_data()
     
-    # Combine train and validation for cross-validation
     X = np.concatenate([X_train, X_val])
     y = np.concatenate([y_train, y_val])
     
-    splits = TimeSeriesSplit(n_splits=3)  # Reduced from 5 for faster training
+    splits = TimeSeriesSplit(n_splits=3)
     for fold, (train_idx, val_idx) in enumerate(splits.split(X)):
         print(f"\nTraining Fold {fold + 1}")
 
@@ -156,7 +128,7 @@ def train_tabnet():
         # Save model
         model.save_model(str(MODEL_SAVE_PATH / f"tabnet_fold{fold + 1}"))
         
-        break  # Remove for full cross-validation
+        break
 
 if __name__ == "__main__":
     train_tabnet()
