@@ -128,13 +128,17 @@ class XGBoostModel(BaseModel):
             self.optimal_buy_thresh = 0.5
             self.optimal_sell_thresh = 0.5
 
-    def predict(self, data: pd.DataFrame) -> np.ndarray:
+    def predict(self, data: pd.DataFrame, threshold: float = None) -> np.ndarray:
         """
         Predict trading signals from input data using the XGBoost model.
 
         :param data: Raw input data as a DataFrame
+        :param threshold: Optional threshold for buy/sell signals
         :return: Array of trading signals
         """
+        if threshold is None:
+            threshold = BaseConfig.THRESHOLD
+        
         df_feat = self.prepare_features(data)
         if df_feat.empty:
             return np.array([])
@@ -148,12 +152,18 @@ class XGBoostModel(BaseModel):
             probs = self.model.predict_proba(df_scaled)
             signals = []
             for p in probs:
-                if p[2] > BaseConfig.THRESHOLD:
-                    signals.append(1)   # Buy
-                elif p[0] > BaseConfig.THRESHOLD:
-                    signals.append(-1)  # Sell
+                # if p[2] > threshold:
+                #     signals.append(1)   # Buy
+                # elif p[0] > threshold:
+                #     signals.append(-1)  # Sell
+                # else:
+                #     signals.append(0)   # Hold
+                if p[2] > threshold and p[0] <= threshold:
+                    signals.append(1)  # Buy (class 2 prob high, sell prob low)
+                elif p[0] > threshold and p[2] <= threshold:
+                    signals.append(-1)  # Sell (class 0 prob high, buy prob low)
                 else:
-                    signals.append(0)   # Hold
+                    signals.append(0)  # Hold (neither condition met)
         else:
             # Use optimized parameters
             if self.optimal_window is not None and len(df_scaled) > self.optimal_window:
@@ -167,9 +177,16 @@ class XGBoostModel(BaseModel):
                 
             signals = []
             for p in probs:
-                if p[0] > self.optimal_buy_thresh and p[2] <= self.optimal_sell_thresh:
+                # if p[0] > self.optimal_buy_thresh and p[2] <= self.optimal_sell_thresh:
+                #     signals.append(1)   # Buy
+                # elif p[2] > self.optimal_sell_thresh and p[0] <= self.optimal_buy_thresh:
+                #     signals.append(-1)  # Sell
+                # else:
+                #     signals.append(0)   # Hold
+                
+                if p[2] > self.optimal_buy_thresh and p[0] <= self.optimal_sell_thresh:
                     signals.append(1)   # Buy
-                elif p[2] > self.optimal_sell_thresh and p[0] <= self.optimal_buy_thresh:
+                elif p[0] > self.optimal_sell_thresh and p[2] <= self.optimal_buy_thresh:
                     signals.append(-1)  # Sell
                 else:
                     signals.append(0)   # Hold
