@@ -9,7 +9,6 @@ from quantpilot.config import BaseConfig, XGBConfig
 from quantpilot.models.base_model import BaseModel
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
-# from quantpilot.models.xgboost.model import XGBoostModel
 
 class XGBoostModel(BaseModel):
     """
@@ -23,7 +22,22 @@ class XGBoostModel(BaseModel):
             # Extract the actual XGBoost model
             self.model = model_data['model']
             self.scaler = model_data['scaler']
-            self.features = model_data['features']
+            self.features = [
+    'exchange_whale_ratio',
+    'taker_buy_ratio',
+    'coinbase_premium_gap',
+    'coinbase_premium_index',
+    'exchange_supply_ratio',
+    'miner_supply_ratio',
+    'addresses_count_active',
+    'addresses_count_outflow',
+    'transactions_count_outflow',
+    'tokens_transferred_total',
+    'short_liquidations',
+    'short_liquidations_usd',
+    'long_liquidations',
+    'long_liquidations_usd'
+]
         except Exception as e:
             print(f"Failed to load model: {e}")
             self.model = XGBClassifier(objective='multi:softprob', num_class=3)

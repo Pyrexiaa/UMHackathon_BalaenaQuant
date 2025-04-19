@@ -12,8 +12,8 @@ class TCNConfig:
 
 
 class XGBConfig:
-    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost/xgboost_model.pkl"
-    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
+    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost2/xgboost_model.pkl"
+    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost2/scaler.pkl"
     # XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_assumption_8/xgboost_model.pkl"
     # XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_assumption_8//scaler.pkl"
     XGB_FEATURE_PATH = [

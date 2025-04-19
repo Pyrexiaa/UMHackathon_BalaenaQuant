@@ -37,9 +37,9 @@ sys.path.append(
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest_v2.csv"
 RESULTS_DIR = PROJECT_ROOT / "experimental/modeling/results/xgboost"
-MODEL_DIR = Path("quantpilot/models_weights/xgboost")
+MODEL_DIR = Path("quantpilot/models_weights/xgboost2")
 FEE_RATE = 0.0006
-SCALING_PATH = "quantpilot/models_weights/xgboost/scaler.pkl"
+SCALING_PATH = "quantpilot/models_weights/xgboost2/scaler.pkl"
 
 # Ensure output directories exist
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -221,6 +221,7 @@ class XGBoostTradingModel:
         }
         
         joblib.dump(model_data, MODEL_DIR / "xgboost_model.pkl")    
+        joblib.dump(self.scaler, MODEL_DIR / "scaler.pkl")
         print(f"Model saved to {MODEL_DIR / 'xgboost_model.pkl'}")
 
     def evaluate_model_performance(self, y_true, y_pred, set_name="Validation"):
@@ -490,7 +491,6 @@ class XGBoostTradingModel:
 #     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
 #     model = XGBoostTradingModel()
 #     train , test = model.load_csv(dataset_path)
-<<<<<<< HEAD
 #     # test_feat = model.prepare_features(test)
 #     test_feat = test
 #     test_feat = model.normalize_data(test_feat, SCALING_PATH)
@@ -556,79 +556,20 @@ class XGBoostTradingModel:
 
 #      # Evaluate performance
 #     model.evaluate_performance(equity, trades,"Test")
-=======
-#     test_feat = model.prepare_features(test)
-# test_feat = model.normalize_data(test_feat, SCALING_PATH)
-# X_test = test_feat.drop(columns=['target'])
-# y_test = test_feat["target"]
-#  # Prepare metrics storage
-# all_fold_results = []
-
-# # Use TimeSeriesSplit
-# tscv = TimeSeriesSplit(n_splits=5)
-# for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(train)):
-#     print(f"\n=== Fold {fold_idx + 1} ===")
-#     train_df = train.iloc[train_idx].copy()
-#     val_df = train.iloc[val_idx].copy()
-
-#     # Feature prep
-#     train_feat = model.prepare_features(train_df)
-#     val_feat = model.prepare_features(val_df)
-
-#     # Normalize
-#     train_feat = model.normalize_data(train_feat)
-#     val_feat = model.normalize_data(val_feat, SCALING_PATH)
-
-#     # Setup for training
-#     model.features = train_feat.columns.tolist()
-#     X_train = train_feat.drop(columns=["target"])
-#     y_train = train_feat["target"]
-#     X_val = val_feat.drop(columns=["target"])
-#     y_val = val_feat["target"]
-
-#     # Train
-#     model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
-
-#     # Predict and Evaluate
-#     signals = model.predict_signals(X_val.values)
-#     model.evaluate_model_performance(y_val, signals, f"Validation Fold {fold_idx+1}")
-#     equity, trades, trade_dates = model.backtest(val_df, signals)
-#     fold_results = model.evaluate_performance(equity, trades, f"Validation Fold {fold_idx+1}")
-#     all_fold_results.append(fold_results)
-
-#     # Optional: Save model per fold
-#     model.save_model(fold=fold_idx + 1)
-
-# # Convert results to DataFrame
-# results_df = pd.DataFrame(all_fold_results)
-# print("\n=== Cross-Validation Summary ===")
-# print(results_df.describe())
-
-# # Save overall results
-# results_df.to_csv(f"{RESULTS_DIR}/cv_fold_metrics.csv", index=False)
-
-# # Test set
-# signals = model.predict_signals(X_test.values)
-# model.evaluate_model_performance(y_test, signals, "Test")
-# equity, trades, trade_dates = model.backtest(test, signals)
-# test_results = model.evaluate_performance( equity, trades,"Test")
-
-# # Save model
-# model.save_model()
-
-#  # Evaluate performance
-# model.evaluate_performance(equity, trades,"Test")
-
->>>>>>> 57b8c70dfba3763cd76bf4cb30edc6095d27c54f
 
 def main():
     # Initialize model and load data
     model = XGBoostTradingModel()
-<<<<<<< HEAD
     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
-    
     print("\nLoading data...")
     train_df, test_df = model.load_csv(dataset_path)
+
+    # Save plots to "plots/" folder
+    anova_results = model.prepare_features(train_df, plot_dir="plots")
+
+    print("\nANOVA Results (sorted by p-value):")
+    print(anova_results)
+    anova_results.to_csv("anova_results.csv")
     
     # Debug: Check columns
     print("\nColumns in train_df:", train_df.columns.tolist())
@@ -638,7 +579,6 @@ def main():
     print("\nNormalizing data...")
     train_normalized = model.normalize_data(train_df)
     test_normalized = model.normalize_data(test_df, SCALING_PATH)
-    
     # Split into features/target
     X_train = train_normalized.drop(columns=["target"])
     y_train = train_normalized["target"]
@@ -672,37 +612,6 @@ def main():
     print("\n=== Training Complete ===")
     print(f"Validation Balanced Accuracy: {val_metrics['balanced_accuracy']:.4f}")
     print(f"Test Balanced Accuracy: {test_metrics['balanced_accuracy']:.4f}") 
-=======
-    df_train, df_test = model.load_csv(dataset_path)
-
-    # Save plots to "plots/" folder
-    anova_results = model.prepare_features(df_train, plot_dir="plots")
-    most_common_window, best_per_feature = model.select_best_common_window(
-        anova_results,
-        [
-            "Exchange_whale_ratio",
-            "Taker_buy_ratio",
-            "Coinbase_premium_gap",
-            "Coinbase_premium_index",
-            "exchange_supply_ratio",
-            "miner_supply_ratio",
-            "Addresses_count_active",
-            "Addresses_count_outflow",
-            "transactions_count_outflow",
-            "Tokens_transferred_total",
-            "short_liquidations",
-            "short_liquidations_usd",
-            "long_liquidations",
-            "long_liquidations_usd",
-        ],
-    )
-    print(f"Most common best window size: {most_common_window}")
-
-    print("\nANOVA Results (sorted by p-value):")
-    print(anova_results)
-    anova_results.to_csv("anova_results.csv", index=False)
-
->>>>>>> 57b8c70dfba3763cd76bf4cb30edc6095d27c54f
 
 if __name__ == "__main__":
     main()
