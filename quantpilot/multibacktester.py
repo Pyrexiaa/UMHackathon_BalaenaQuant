@@ -1,6 +1,8 @@
+import json
+import os
 from typing import List, Dict, Optional
 import pandas as pd
-from .backtester import Backtester  
+from .backtester import Backtester
 
 class Multibacktester:
     def __init__(self, data: pd.DataFrame, strategies: List, strategy_names: Optional[List[str]] = None,
@@ -75,5 +77,10 @@ class Multibacktester:
                 'metrics': result['metrics'],
             }
                 
+            
+        
         return results_summary
+    
+    
+
 
