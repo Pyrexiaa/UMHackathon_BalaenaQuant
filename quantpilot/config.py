@@ -8,7 +8,7 @@ class TCNConfig:
     TCN_MODEL_PATH = "quantpilot/models_weights/tcn/checkpoint.pt"
     # TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
     # TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
-    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
+    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaler.pkl"
 
 class TabNetConfig:
     TABNET_MODEL_PATH = "quantpilot/models_weights/tabnet/tabnet_fold1.zip"
