@@ -7,7 +7,7 @@ import pandas as pd
 
 if __name__ == "__main__":
     
-    bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")),
+    bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("gnn")),
                     mode="geometric", entry_exit_logic="mean_reversion")
     # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
     #             mode="geometric", entry_exit_logic="mean_reversion")

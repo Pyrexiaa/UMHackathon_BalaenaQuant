@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-from experimental.modeling.constants import ASSUMPTION_8
+from experimental.modeling.constants import ASSUMPTION_9
 import joblib
 import numpy as np
 from ..base_model import BaseModel
@@ -12,8 +12,13 @@ class TCNModel(BaseModel):
     """
     A Temporal Convolution Network (TCN) model used to generate signals.
     """
-    
-    def __init__(self, model_path=TCNConfig.TCN_MODEL_PATH, scaler_path=TCNConfig.TCN_SCALER_PATH, device=None):
+
+    def __init__(
+        self,
+        model_path=TCNConfig.TCN_MODEL_PATH,
+        scaler_path=TCNConfig.TCN_SCALER_PATH,
+        device=None,
+    ):
         """
         Initialize the TCN model by loading the model and scaler.
 
@@ -22,12 +27,18 @@ class TCNModel(BaseModel):
         :param device: The device on which to run the model (e.g., 'cuda' or 'cpu')
         """
         self.scaler = joblib.load(scaler_path)
-        self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        input_features = 3  # Specify your input features
-        num_channels = [128, 256, 128] # Example for TCN channels
+        self.device = (
+            device
+            if device
+            else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
+
+        input_features = 14  # Specify your input features
+        num_channels = [64, 64, 128]  # Example for TCN channels
         self.model = TCNClassifier(input_features, 3, num_channels).to(self.device)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device)["model_state"])
+        self.model.load_state_dict(
+            torch.load(model_path, map_location=self.device)["model_state"]
+        )
         self.model.eval()  # Set the model to evaluation mode
 
     def prepare_features(self, df):
@@ -37,12 +48,10 @@ class TCNModel(BaseModel):
         :param df: The raw input DataFrame containing market data
         :return: DataFrame with engineered features
         """
-        
-        features = [
-            "tokens_transferred_mean",
-            "tokens_transferred_median",
-            "tokens_transferred_total",
-        ]
+
+        features = ASSUMPTION_9.copy()
+        if "target" in features:
+            features.remove("target")
 
         # Select and clean the relevant columns
         df = df[[f for f in features if f in df.columns]].reset_index(drop=True)
@@ -68,7 +77,7 @@ class TCNModel(BaseModel):
         """
         X = []
         for i in range(BaseConfig.WINDOW_SIZE, len(df)):
-            window = df.iloc[i - BaseConfig.WINDOW_SIZE:i].values
+            window = df.iloc[i - BaseConfig.WINDOW_SIZE : i].values
             X.append(window)
         return np.array(X)
 
@@ -86,7 +95,7 @@ class TCNModel(BaseModel):
         df_feat = self.prepare_features(data)
         df_scaled = self.normalize(df_feat)
         X = self.preprocess(df_scaled)
-        
+
         if len(X) == 0:
             return np.array([]), np.array([])
 
@@ -97,18 +106,18 @@ class TCNModel(BaseModel):
             probs = torch.softmax(logits, dim=1).cpu().numpy()
 
         signals = []
-        
+
         # The model's predictions will be shorter than input due to windowing
-        window_size = getattr(self.model, 'window_size', BaseConfig.WINDOW_SIZE)
-        start_idx = window_size  
-        
+        window_size = getattr(self.model, "window_size", BaseConfig.WINDOW_SIZE)
+        start_idx = window_size
+
         # Pad signals to match input data length
         total_len = len(df_scaled)
-        
+
         # Initialize with HOLD signals for the warmup period
         for i in range(start_idx):
             signals.append(0)
-            
+
         for i, p in enumerate(probs, start=start_idx):
             if i >= total_len:
                 break  # Handle case where we have extra predictions
@@ -120,21 +129,14 @@ class TCNModel(BaseModel):
             #     signals.append(-1) # Sell
 
             # Apply threshold rules
-            if p[0] > threshold and p[2] <= threshold:
+            if p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
                 signals.append(1)  # Buy
-            elif p[2] > threshold and p[0] <= threshold:
+            elif p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
                 signals.append(-1)  # Sell
             else:
                 signals.append(0)  # Hold
-            
-            # if p[2] > threshold and p[0] <= threshold:
-            #     signals.append(1)  # Buy
-            # elif p[0] > threshold and p[2] <= threshold:
-            #     signals.append(-1)  # Sell
-            # else:
-            #     signals.append(0)  # Hold
-            
+
         return np.array(signals)
-    
+
     def fit(self, X: pd.DataFrame, y: pd.Series):
         self.model.fit(X, y)

@@ -2,139 +2,80 @@ import torch
 import torch.nn as nn
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+
 from .config import (
     BATCH_SIZE,
     EPOCHS,
-    LR,
-    WEIGHT_DECAY,
-    SEQUENCE_LENGTH,
-    HIDDEN_FEATURES,
+    RAYTUNE_SAMPLES,
+)
+from ..general_config import (
+    MODEL_BEST_CONFIG,
+    MODEL_CHECKPOINT_PATH,
     SCALING_PATH,
-    MODEL_OUTPUT_PATH,
-    MODEL_OUTPUT_FILE_PATH,
-    TRADING_OUTPUT_FILE_PATH,
-    EVALUATE_PATH,
-    FEE_RATE,
-    SELL_SIGNAL,
-    BUY_SIGNAL,
-    HOLD_SIGNAL,
 )
 from .model_architecture import TimeSeriesGNN
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import matplotlib.pyplot as plt
-from joblib import dump, load
 from .datasets import TimeSeriesDataset
 from torch.utils.data import DataLoader
+import os
+from ..utils import (
+    evaluate_gnn,
+    predict_signals_from_probs,
+    backtest,
+    evaluate_performance,
+    evaluate_model,
+    plot_results,
+    calculate_class_distribution,
+    load_csv,
+    prepare_features,
+    preprocess_data,
+    normalize_data,
+)
+from ray import tune, train
+from ray.tune.schedulers import ASHAScheduler
+from ray.train import Checkpoint
+from sklearn.model_selection import TimeSeriesSplit
 
-def prepare_features(df):
-    if 'close_7d_ma' not in df.columns:
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-    if 'close_30d_std' not in df.columns:
-        df['close_30d_std'] = df['close'].rolling(30).std()
-    if 'volume_zscore' not in df.columns:
-        df['volume_zscore'] = ((df['volume'] - df['volume'].rolling(30).mean()) / 
-                            df['volume'].rolling(30).std())
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
 
-    if ('exchange_whale_ratio' in df.columns and 
-        'start_time_exchange_whale_ratio' in df.columns):
-        df['whale_ratio_diff'] = (df['exchange_whale_ratio'] - 
-                                    df['start_time_exchange_whale_ratio'])
-    
-    # Calculate delta_estimated_leverage_ratio if components exist
-    if ('estimated_leverage_ratio' in df.columns and 
-        'start_time_estimated_leverage_ratio' in df.columns):
-        df['delta_estimated_leverage_ratio'] = (df['estimated_leverage_ratio'] - 
-                                                df['start_time_estimated_leverage_ratio'])
+# raytune_config = {
+#     "lr": tune.loguniform(1e-4, 1e-2),
+#     "weight_decay": tune.loguniform(1e-5, 1e-3),
+#     "num_channels_0": tune.choice([32, 64, 128]),
+#     "num_channels_1": tune.choice([64, 128, 256]),
+#     "num_channels_2": tune.choice([32, 64, 128]),
+# }
 
-    potential_features = [
-        'delta_estimated_leverage_ratio',
-        'whale_ratio_diff',
-        'close_7d_ma',
-        'close_30d_std',
-        'volume_zscore',
-        'taker_buy_ratio',
-        'open_interest',
-        'positions',
-        'close',
-        "open",
-        "high",
-        "low",
-        "volume"
-    ]
+raytune_config = {
+    "lr": 1e-3,
+    "weight_decay": 1e-5,
+    "hidden_features": 16,
+    "num_layers": 2
+}
 
-    df = df[potential_features].copy()
-    df = df.dropna()  # Drop rows with NaN values
-    df = df.reset_index(drop=True)  # Reset index after dropping rows
+# raytune_config = {
+#     "lr": tune.loguniform(1e-4, 1e-2),
+#     "weight_decay": tune.loguniform(1e-5, 1e-3),
+#     "hidden_features": tune.choice([16, 32, 64, 128]),
+#     "num_layers": tune.choice([1, 2, 3, 4])
+# }
 
-    return df
 
-def calculate_class_distribution(y_train):
-    y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-    class_counts = torch.bincount(y_train_tensor)  # Counts of each class in the training labels
-    total_samples = len(y_train_tensor)
-    class_freq = class_counts.float() / total_samples  # Normalize counts by total samples
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TCN_DIR = os.path.dirname(CURRENT_DIR)
+MODELING_DIR = os.path.dirname(TCN_DIR)
+BASE_DIR = os.path.dirname(MODELING_DIR)
 
-    # Calculate class weights (inverse of class frequency)
-    class_weights = 1.0 / class_freq  # Inverse of frequency
-    class_weights = class_weights / class_weights.sum()  # Normalize so they sum to 1
 
-    # Convert to a tensor and ensure it's of float type
-    class_weights = class_weights.float()
-    return class_weights
+# --- Read from env if available ---
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 120))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output/gnn", "ASSUMPTION_9", str(WINDOW_SIZE))
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# --- Load CSV ---
-def load_csv(df_path):
-    df = pd.read_csv(df_path)
-    
-    # Keep and parse datetime
-    df["datetime"] = pd.to_datetime(df["datetime"])
-    df["year"] = df["datetime"].dt.year
-    
-    # Drop nan rows
-    df = df.dropna()
-
-    # Split by year
-    df_train = df[df["year"].between(2020, 2022)].copy()
-    df_val = df[df["year"] == 2023].copy()
-    df_test = df[df["year"] >= 2024].copy()
-
-    df_train = df_train.drop(columns=["datetime", "year"], axis=1)
-    df_val = df_val.drop(columns=["datetime", "year"], axis=1)
-    df_test = df_test.drop(columns=["datetime", "year"], axis=1)
-
-    return df_train, df_val, df_test
-
-# --- Normalize ---
-def normalize_data(df, previous_scaling=None):
-    # Separate features and label
-    features = df.drop(columns=["positions"])
-    positions = df["positions"].reset_index(drop=True)
-
-    if previous_scaling:
-        # Load previously saved scaler
-        scaler = load(previous_scaling)
-        scaled_features = scaler.transform(features)
-    else:
-        scaler = StandardScaler()
-        scaled_features = scaler.fit_transform(features)
-        dump(scaler, SCALING_PATH, compress=True)
-
-    # Combine scaled features and label
-    scaled_df = pd.DataFrame(scaled_features, columns=features.columns)
-    scaled_df["positions"] = positions
-
-    return scaled_df
-
-# --- Preprocess data ---
-def preprocess_data(df):
-    X = []
-    y = []
-    for i in range(SEQUENCE_LENGTH, len(df)):
-        X.append(df.iloc[i - SEQUENCE_LENGTH:i].drop(columns=["positions"]).values)
-        y.append(df["positions"].iloc[i])
-    
-    return np.array(X), np.array(y)
 
 # --- Convert to Torch tensors ---
 def convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test):
@@ -151,10 +92,15 @@ def convert_to_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test):
     val_dataset = torch.utils.data.TensorDataset(X_val, y_val)
 
     # Create data loaders
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=BATCH_SIZE, shuffle=True
+    )
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=BATCH_SIZE, shuffle=False
+    )
 
     return train_loader, val_loader, X_test, y_test
+
 
 # --- Training Loop ---
 def train_model(model, train_loader, val_loader, optimizer, loss_criterion):
@@ -199,234 +145,237 @@ def train_model(model, train_loader, val_loader, optimizer, loss_criterion):
         avg_val_loss = val_loss / len(val_loader.dataset)
         val_accuracy = 100 * correct / total
 
-        print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f} - Val Accuracy: {val_accuracy:.2f}%")
+        print(
+            f"Epoch {epoch + 1}/{EPOCHS} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f} - Val Accuracy: {val_accuracy:.2f}%"
+        )
 
     return model
 
-def predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30):
-    """
-    Convert class probabilities into trading signals:
-    - class 0 (buy): prob > buy_thresh → 0.30
-    - class 2 (sell): prob > sell_thresh → 0.30
-    - class 1 (hold): prob > hold_thresh → 0.40
-    """
-    signals = []
-    for p in probs:
-        p = np.array(p)
-        if p[0] > buy_thresh:
-            signals.append(BUY_SIGNAL)  # Buy
-        elif p[2] > sell_thresh:
-            signals.append(SELL_SIGNAL)  # Sell
-        else:
-            signals.append(HOLD_SIGNAL)  # Hold
-    return np.array(signals)
 
-def backtest(df, signals):
-    """Backtest strategy based on trading signals."""
-    capital = 1000000
-    position = 0
-    entry_price = 0
-    prev_signal = 0
-    equity = []
-    trades = []
-    pnl_list = []
-    pos_list = []
-    capital_list = []
-    trades_flag = []
+def train_tune(config):
+    dataset_path = os.path.join(
+        MODELING_DIR, "datasets/btc_data_with_target_latest_v2.csv"
+    )
+    # --- Load CSV ---
+    raw_df_train, _ = load_csv(dataset_path)
+    # --- Prepare full features and normalize ---
+    df_full = prepare_features(raw_df_train)
+    scaled_full = normalize_data(
+        df_full,
+        previous_scaling=False,
+        scaling_path=os.path.join(OUTPUT_DIR, SCALING_PATH),
+    )
+    X, y = preprocess_data(scaled_full)
+    # --- TimeSeriesSplit Cross-Validation ---
+    tscv = TimeSeriesSplit(n_splits=5)
+    fold_metrics_list = []
+    for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(X)):
+        X_train, y_train = X[train_idx], y[train_idx]
+        X_val, y_val = X[val_idx], y[val_idx]
 
+        # Create datasets and dataloaders
+        train_loader = DataLoader(
+            TimeSeriesDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=False
+        )
+        val_loader = DataLoader(
+            TimeSeriesDataset(X_val, y_val), batch_size=BATCH_SIZE, shuffle=False
+        )
 
-    for i in range(len(signals)):
-        price = df.iloc[i]["close"]
-        pnl = 0
-        trade_occurred = 0
+        # Init model
+        model = TimeSeriesGNN(
+            num_nodes=X_train.shape[2],
+            in_features=1,
+            hidden_features=config["hidden_features"],
+            out_features=3,
+            num_layers=config["num_layers"],
+            sequence_length=X_train.shape[1]
+        )
 
-        # Exit condition
-        if position != 0 and signals[i] != prev_signal:
-            pnl = position * (price - entry_price) - abs(position * price) * FEE_RATE
-            capital += pnl
-            trades.append(pnl)
-            position = 0  # Close position
-            trade_occurred = 1  # Trade happened
+        optimizer = torch.optim.Adam(
+            model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"]
+        )
+        class_weights = calculate_class_distribution(y_train)
+        loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-        # Entry condition
-        if signals[i] != 0 and position == 0:
-            entry_price = price
-            position = (capital // price) * signals[i]
-            capital -= abs(position * price) * FEE_RATE
-            prev_signal = signals[i]
+        checkpoint = train.get_checkpoint()
+        if checkpoint:
+            with checkpoint.as_directory() as checkpoint_dir:
+                checkpoint_dict = torch.load(
+                    os.path.join(checkpoint_dir, "checkpoint.pt")
+                )
+                model.load_state_dict(checkpoint_dict["model_state"])
 
-        # Logging per step
-        current_equity = capital + position * price
-        equity.append(current_equity)
-        pnl_list.append(pnl)
-        pos_list.append(position)
-        capital_list.append(capital)
-        trades_flag.append(trade_occurred)
+        # Training
+        for epoch in range(EPOCHS):
+            model.train()
+            for batch_x, batch_y in train_loader:
+                optimizer.zero_grad()
+                num_nodes = batch_x.shape[2]
+                adj = torch.eye(num_nodes).unsqueeze(0).repeat(batch_x.size(0), 1, 1)
 
-    result_df = df.copy().reset_index(drop=True)
-    result_df["signal"] = signals
-    result_df["equity"] = equity
-    result_df["pnl"] = pnl_list
-    result_df["capital"] = capital_list
-    result_df["position"] = pos_list
-    result_df["trades"] = trades_flag  # 1 if a trade happened, else 0
-    result_df.to_csv(TRADING_OUTPUT_FILE_PATH, index=False)
+                logits = model(batch_x, adj)
+                loss = loss_criterion(logits, batch_y)
+                loss.backward()
+                optimizer.step()
 
-    return np.array(equity), trades
+        # Validation + Metrics
+        model.eval()
+        all_preds, all_targets = [], []
+        with torch.no_grad():
+            for val_x, val_y in val_loader:
+                num_nodes = val_x.shape[2]
+                adj = torch.eye(num_nodes).unsqueeze(0).repeat(val_x.size(0), 1, 1)
+                val_preds = model(val_x, adj)
+                _, predicted = torch.max(val_preds.data, 1)
+                all_preds.extend(predicted.cpu().numpy())
+                all_targets.extend(val_y.cpu().numpy())
 
+        y_true, y_pred = np.array(all_targets), np.array(all_preds)
 
-def evaluate_performance(equity, trades, set_name="Validation"):
-    """Calculate performance metrics"""
-    returns = np.diff(equity) / equity[:-1]
-    
-    # Sharpe Ratio
-    sharpe = np.sqrt(252) * np.mean(returns) / np.std(returns)
-    
-    # Max Drawdown
-    peak = equity[0]
-    max_dd = 0
-    for value in equity:
-        if value > peak:
-            peak = value
-        dd = (peak - value) / peak
-        if dd > max_dd:
-            max_dd = dd
-            
-    # Trade stats
-    win_rate = np.mean(np.array(trades) > 0) if trades else 0
-    
-    print(f"\n{set_name} Performance:")
-    print(f"Sharpe Ratio: {sharpe:.2f}")
-    print(f"Max Drawdown: {max_dd:.2%}")
-    print(f"Total Trades: {len(trades)}")
-    print(f"Win Rate: {win_rate:.2%}")
-    
-    return {
-        'sharpe': sharpe,
-        'max_drawdown': max_dd,
-        'num_trades': len(trades),
-        'win_rate': win_rate
-    }
+        fold_metrics = {
+            "fold": fold_idx + 1,
+            "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
+            "precision_macro": precision_score(y_true, y_pred, average="macro"),
+            "recall_macro": recall_score(y_true, y_pred, average="macro"),
+            "f1_macro": f1_score(y_true, y_pred, average="macro"),
+            "precision_weighted": precision_score(y_true, y_pred, average="weighted"),
+            "recall_weighted": recall_score(y_true, y_pred, average="weighted"),
+            "f1_weighted": f1_score(y_true, y_pred, average="weighted"),
+        }
+        fold_metrics_list.append(fold_metrics)
+        print(f"[Fold {fold_idx + 1}] Metrics: {fold_metrics}")
 
-# --- Evaluation ---
-def evaluate_model(model, test_loader):
-    model.eval()
-    all_preds = []
-    all_targets = []
-    all_probs = []
+        # Save checkpoint for this fold
+        fold_checkpoint_dir = os.path.join(
+            OUTPUT_DIR, MODEL_CHECKPOINT_PATH, f"fold_{fold_idx + 1}"
+        )
+        os.makedirs(fold_checkpoint_dir, exist_ok=True)
+        checkpoint_file = os.path.join(fold_checkpoint_dir, "checkpoint.pt")
+        torch.save(
+            {"epoch": EPOCHS, "model_state": model.state_dict()}, checkpoint_file
+        )
 
-    with torch.no_grad():
-        for inputs, targets in test_loader:
-            # inputs = inputs.to(device)
-            # targets = targets.to(device)
-            num_nodes = inputs.shape[2]
-            adj = torch.eye(num_nodes).unsqueeze(0).repeat(inputs.size(0), 1, 1)
+    # --- Final Reporting ---
+    metrics_df = pd.DataFrame(fold_metrics_list)
+    metrics_df["config_id"] = config.get("trial_id", "unknown")
 
-            logits = model(inputs, adj)
-            probs = torch.softmax(logits, dim=1)  # Shape: [batch_size, num_classes]
-            preds = torch.argmax(probs, dim=1)
+    # Save metrics DataFrame
+    metrics_csv_path = os.path.join(
+        OUTPUT_DIR, MODEL_CHECKPOINT_PATH, "crossval_metrics.csv"
+    )
+    metrics_df.to_csv(metrics_csv_path, index=False)
+    print(f"[INFO] Saved cross-validation metrics to {metrics_csv_path}")
 
-            all_preds.extend(preds.cpu().numpy())
-            all_targets.extend(targets.cpu().numpy())
-            all_probs.extend(probs.cpu().numpy())
+    # Report average metrics to Ray Tune
+    mean_metrics = metrics_df.drop(columns=["fold", "config_id"]).mean().to_dict()
 
-    y_true = np.array(all_targets)
-    y_pred = np.array(all_preds)
-    probs_array = np.array(all_probs)
+    # Optional: Save last model again for Ray Tune checkpoint
+    final_checkpoint_dir = os.path.join(
+        OUTPUT_DIR, MODEL_CHECKPOINT_PATH, "final_checkpoint"
+    )
+    os.makedirs(final_checkpoint_dir, exist_ok=True)
+    torch.save(
+        {"epoch": EPOCHS, "model_state": model.state_dict()},
+        os.path.join(final_checkpoint_dir, "checkpoint.pt"),
+    )
+    train.report(
+        metrics=mean_metrics, checkpoint=Checkpoint.from_directory(final_checkpoint_dir)
+    )
 
-    acc = accuracy_score(y_true, y_pred)
-    report = classification_report(y_true, y_pred, target_names=["Buy", "Hold", "Sell"])
-    cm = confusion_matrix(y_true, y_pred)
-
-    print(f"Overall Test Accuracy: {acc:.4f}")
-    print("Overall Classification Report:\n", report)
-    print("Overall Confusion Matrix:\n", cm)
-
-    # Convert to numpy and save
-    df_probs = pd.DataFrame(probs_array, columns=["Prob_Buy", "Prob_Hold", "Prob_Sell"])
-    df_probs["True_Label"] = y_true
-    df_probs["Predicted_Label"] = y_pred
-    df_probs.to_csv(MODEL_OUTPUT_FILE_PATH, index=False)
-    print(f"Saved overall model probabilities and predictions to: {MODEL_OUTPUT_FILE_PATH}")
-
-    return probs_array, y_true
-    
-def plot_results(df, equity, signals, set_name="validation"):
-    """Visualize backtest results"""
-    plt.figure(figsize=(14, 7))
-    
-    # Price and Equity
-    ax1 = plt.subplot(2, 1, 1)
-    ax1.plot(df.index, df['close'], label='Price', alpha=0.6)
-    ax1.set_ylabel('Price')
-    ax1.legend(loc='upper left')
-    
-    ax2 = ax1.twinx()
-    ax2.plot(df.index, equity, label='Equity', color='green')
-    ax2.set_ylabel('Portfolio Value')
-    ax2.legend(loc='upper right')
-    ax1.set_title(f'{set_name.capitalize()} Backtest Results')
-
-    # Signals
-    plt.subplot(2, 1, 2)
-    plt.step(df.index, signals, where='post', label='Signals')
-    plt.yticks([0, 1, 2], ['Buy', 'Hold', 'Sell'])
-    plt.ylabel('Trading Signal')
-    plt.xlabel('Date')
-    
-    plt.tight_layout()
-    plt.savefig(EVALUATE_PATH)
-    plt.close()
 
 if __name__ == "__main__":
-    dataset_path = "experimental/datasets/btc_data_with_target_modified.csv"
+    dataset_path = os.path.join(
+        MODELING_DIR, "datasets/btc_data_with_target_latest_v2.csv"
+    )
     # --- Load CSV ---
-    df_train, df_val, df_test = load_csv(dataset_path)
+    raw_df_train, raw_df_test = load_csv(dataset_path)
     # --- Prepare features ---
-    df_train = prepare_features(df_train)
-    df_val = prepare_features(df_val)
-    df_test = prepare_features(df_test)
+    df_train = prepare_features(raw_df_train)
+    df_test = prepare_features(raw_df_test)
     # # --- Normalize ---
-    scaled_train = normalize_data(df_train, previous_scaling=False)
-    scaled_val = normalize_data(df_val, previous_scaling=SCALING_PATH)
-    scaled_test = normalize_data(df_test, previous_scaling=SCALING_PATH)
+    scaled_train = normalize_data(
+        df_train,
+        previous_scaling=False,
+        scaling_path=os.path.join(OUTPUT_DIR, SCALING_PATH),
+    )
+    scaled_test = normalize_data(
+        df_test, previous_scaling=os.path.join(OUTPUT_DIR, SCALING_PATH)
+    )
     # # --- Preprocess data ---
     X_train, y_train = preprocess_data(scaled_train)
-    X_val, y_val = preprocess_data(scaled_val)
     X_test, y_test = preprocess_data(scaled_test)
     # --- Convert to Torch tensors and DataLoaders ---
     train_dataset = TimeSeriesDataset(X_train, y_train)
-    val_dataset = TimeSeriesDataset(X_val, y_val)
     test_dataset = TimeSeriesDataset(X_test, y_test)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Train model
-    # Initialize Model, Loss, and Optimizer
-    input_features = X_train.shape[2]
-    num_nodes = input_features # Treat each feature as a node
-    model = TimeSeriesGNN(num_nodes=num_nodes, in_features=1, hidden_features=HIDDEN_FEATURES, out_features=3)
-    torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
+    # Configure the Ray Tune experiment
 
-    class_weights = calculate_class_distribution(y_train)
-    loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    model = train_model(model, train_loader, val_loader, optimizer, loss_criterion)
+    scheduler = ASHAScheduler(
+        metric="balanced_accuracy",
+        mode="max",
+        max_t=50,
+    )
+
+    result = tune.run(
+        train_tune,
+        resources_per_trial={"cpu": 2, "gpu": 0},
+        config=raytune_config,
+        num_samples=RAYTUNE_SAMPLES,
+        scheduler=scheduler,
+    )
+
+    # Load the net with best configuration
+    # Best Config focuses only on the best-performing hyperparameter configuration.
+    best_config = result.get_best_config(metric="balanced_accuracy", mode="max")
+    print("Best config: ", best_config)
+    # Best Trial refers to the entire trial run with the best performance, including both the hyperparameters and the model results (e.g., validation accuracy, checkpoint, etc.).
+    best_trial = result.get_best_trial(
+        metric="balanced_accuracy", mode="max", scope="all"
+    )
+    print("Best Trial: ", best_trial.config)
+    best_checkpoint = result.get_best_checkpoint(
+        best_trial, metric="balanced_accuracy", mode="max"
+    )
+    print("Best Checkpoint: ", best_checkpoint)
+    best_checkpoint_path = os.path.join(best_checkpoint.path, "checkpoint.pt")
+    print("Best Checkpoint Path: ", best_checkpoint_path)
+
+    # Save the best config, trial and checkpoint to a dictionary
+    raytune_data = {
+        "Best_Config": [best_config],
+        "Best_Trial_Config": [best_trial.config],
+        "Best_Checkpoint_Path": [best_checkpoint_path],
+    }
+    raytune_df = pd.DataFrame(raytune_data)
+    raytune_df.to_csv(os.path.join(OUTPUT_DIR, MODEL_BEST_CONFIG), index=False)
+
+    best_model = TimeSeriesGNN(
+        num_nodes=X_train.shape[2],
+        in_features=1,
+        hidden_features=best_config["hidden_features"],
+        out_features=3,
+        num_layers=best_config["num_layers"],
+        sequence_length=X_train.shape[1],
+    )
+    checkpoint = torch.load(best_checkpoint_path)
+    best_model.load_state_dict(checkpoint["model_state"])
 
     # Get predicted probabilities
-    probs, y_true = evaluate_model(model, test_loader)
+    probs, y_true = evaluate_gnn(best_model, test_loader, OUTPUT_DIR)
 
     # Generate trading signals
     signals = predict_signals_from_probs(probs, buy_thresh=0.30, sell_thresh=0.30)
 
     # Backtest on raw (non-scaled) test set
-    df_test_raw = df_test.reset_index(drop=True).iloc[SEQUENCE_LENGTH:].copy()
-    equity, trades = backtest(df_test_raw, signals)
+    df_test_raw = raw_df_test.reset_index(drop=True).iloc[WINDOW_SIZE:].copy()
+    equity, trades, trade_dates = backtest(df_test_raw, signals)
 
     # Evaluate performance
     evaluate_performance(equity, trades, set_name="Test")
 
     # Plot result
-    plot_results(df_test_raw, equity, signals, set_name="Test")
+    plot_results(df_test_raw, signals, OUTPUT_DIR)
