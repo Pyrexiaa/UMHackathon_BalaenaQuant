@@ -43,9 +43,20 @@ class XGBoostModel(BaseModel):
 
     def prepare_features(self, df):
         required_features = [
-    "tokens_transferred_mean",
-    "tokens_transferred_median",
-    "tokens_transferred_total",
+    'exchange_whale_ratio',
+    'taker_buy_ratio',
+    'coinbase_premium_gap',
+    'coinbase_premium_index',
+    'exchange_supply_ratio',
+    'miner_supply_ratio',
+    'addresses_count_active',
+    'addresses_count_outflow',
+    'transactions_count_outflow',
+    'tokens_transferred_total',
+    'short_liquidations',
+    'short_liquidations_usd',
+    'long_liquidations',
+    'long_liquidations_usd'
 ]
         
         # Check for missing features
