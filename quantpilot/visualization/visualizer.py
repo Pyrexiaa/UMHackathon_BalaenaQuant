@@ -1,17 +1,24 @@
+import atexit
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import json
 import glob
-
 import seaborn as sns
 
+
+def cleanup_meta_files():
+    meta_files = glob.glob("output/meta_*.json")
+    for meta_file in meta_files:
+        try:
+            os.remove(meta_file)
+            print(f"Deleted {meta_file}")
+        except Exception as e:
+            print(f"Could not delete {meta_file}: {e}")
+
+
 def generate_metric_heatmap(strategies, metric: str = "Sharpe Ratio"):
-    """
-    Generates a heatmap comparing the selected metric across strategies.
-    Returns the matplotlib figure object.
-    """
     metric_rows = []
     for strat in strategies:
         try:
@@ -21,7 +28,7 @@ def generate_metric_heatmap(strategies, metric: str = "Sharpe Ratio"):
                     "Strategy": strat['name'],
                     metric: value
                 })
-        except Exception as e:
+        except Exception:
             continue
 
     if not metric_rows:
@@ -115,35 +122,29 @@ def run_dashboard():
                 ax.set_ylabel("Price")
                 ax.legend()
                 st.pyplot(fig)
-                
-    # 🔥 Metric Heatmap Comparison
-    st.markdown("## 📊 Strategy Metric Comparison")
 
-    # Gather all unique metric keys from available strategies
-    available_metrics = set()
-    print("Strat dict: ", strategies)
-    for strat in strategies:
-        try:
-            available_metrics.update(strat['meta']['metrics']['full'].keys())
-        except Exception:
-            continue
+    if len(strategies) > 1:
+        st.markdown("## 📊 Strategy Metric Comparison")
+        available_metrics = set()
+        for strat in strategies:
+            try:
+                available_metrics.update(strat['meta']['metrics']['full'].keys())
+            except Exception:
+                continue
 
-    if not available_metrics:
-        st.info("No metrics found for heatmap.")
-    else:
-        selected_metric = st.selectbox("Choose metric to compare:", sorted(available_metrics))
-
-        fig = generate_metric_heatmap(strategies, selected_metric)
-        if fig:
-            st.pyplot(fig)
+        if not available_metrics:
+            st.info("No metrics found for heatmap.")
         else:
-            st.warning("Could not generate heatmap for selected metric.")
+            selected_metric = st.selectbox("Choose metric to compare:", sorted(available_metrics))
 
-    for meta_file in meta_files:
-        try:
-            os.remove(meta_file)
-        except Exception as e:
-            st.warning(f"Could not delete {meta_file}: {e}")
+            fig = generate_metric_heatmap(strategies, selected_metric)
+            if fig:
+                st.pyplot(fig)
+            else:
+                st.warning("Could not generate heatmap for selected metric.")
+
 
 if __name__ == "__main__":
+   
     run_dashboard()
+    atexit.register(cleanup_meta_files)
