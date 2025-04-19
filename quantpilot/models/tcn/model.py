@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+from experimental.modeling.constants import ASSUMPTION_8
 import joblib
 import numpy as np
 from ..base_model import BaseModel
@@ -23,10 +24,10 @@ class TCNModel(BaseModel):
         self.scaler = joblib.load(scaler_path)
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        input_features = 12  # Specify your input features
-        num_channels = [64, 128, 64] # Example for TCN channels
+        input_features = 3  # Specify your input features
+        num_channels = [128, 256, 128] # Example for TCN channels
         self.model = TCNClassifier(input_features, 3, num_channels).to(self.device)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device)["model_state"])
         self.model.eval()  # Set the model to evaluation mode
 
     def prepare_features(self, df):
@@ -37,30 +38,10 @@ class TCNModel(BaseModel):
         :return: DataFrame with engineered features
         """
         
-        df = df.copy()
-        df['close_7d_ma'] = df['close'].rolling(7).mean()
-        df['close_30d_std'] = df['close'].rolling(30).std()
-        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(30).mean()) / df['volume'].rolling(30).std()
-
-        if {'exchange_whale_ratio', 'start_time_exchange_whale_ratio'}.issubset(df.columns):
-            df['whale_ratio_diff'] = df['exchange_whale_ratio'] - df['start_time_exchange_whale_ratio']
-
-        if {'estimated_leverage_ratio', 'start_time_estimated_leverage_ratio'}.issubset(df.columns):
-            df['delta_estimated_leverage_ratio'] = df['estimated_leverage_ratio'] - df['start_time_estimated_leverage_ratio']
-
         features = [
-            'delta_estimated_leverage_ratio',
-            'whale_ratio_diff',
-            'close_7d_ma',
-            'close_30d_std',
-            'volume_zscore',
-            'taker_buy_ratio',
-            'open_interest',
-            'close', 
-            'open', 
-            'high', 
-            'low', 
-            'volume'
+            "tokens_transferred_mean",
+            "tokens_transferred_median",
+            "tokens_transferred_total",
         ]
 
         # Select and clean the relevant columns
@@ -128,12 +109,13 @@ class TCNModel(BaseModel):
             if i >= total_len:
                 break  # Handle case where we have extra predictions
             p = np.array(p)
-            if p[2] > BaseConfig.THRESHOLD:
+            # Apply threshold rules
+            if p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
                 signals.append(1)  # Buy
-            elif p[0] > BaseConfig.THRESHOLD:
-                signals.append(-1) # Sell
+            elif p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
+                signals.append(-1)  # Sell
             else:
-                signals.append(0)  # Hold 
+                signals.append(0)  # Hold
             
         return np.array(signals)
     
