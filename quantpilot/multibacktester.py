@@ -1,17 +1,28 @@
 from typing import List, Dict, Optional
 import pandas as pd
+import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 from .backtester import Backtester  
 
 class Multibacktester:
     def __init__(self, data: pd.DataFrame, strategies: List, strategy_names: Optional[List[str]] = None,
                  initial_capital: float = 100000, risk_free_rate: float = 0.0, trading_fee: float = 0.0006,
-                 qty_per_trade: int = 1, mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
+                 qty_per_trade: int = 1, mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following',
+                 output_dir: str = "output"):
         """
         Initialize the strategy tester with multiple strategies.
         
         :param data: The price data to backtest on.
         :param strategies: A list of strategy instances (each must implement generate_signals()).
         :param strategy_names: Optional list of names corresponding to each strategy.
+        :param initial_capital: Initial capital for the backtest.
+        :param risk_free_rate: Risk-free rate for performance metrics.
+        :param trading_fee: Trading fee for each transaction.
+        :param qty_per_trade: Quantity per trade.
+        :param mode: Mode of the strategy ('arithmetic' or 'geometric').
+        :param entry_exit_logic: Logic for entry and exit signals.
+        :param output_dir: Directory to save output files.
         """
         self.data = data
         self.strategies = strategies
@@ -22,6 +33,8 @@ class Multibacktester:
         self.qty_per_trade = qty_per_trade
         self.mode = mode
         self.entry_exit_logic = entry_exit_logic
+        self.results_summary = {}
+        self.output_dir = output_dir
 
         if len(self.strategies) != len(self.strategy_names):
             raise ValueError("strategies and strategy_names must have the same length")
@@ -74,6 +87,41 @@ class Multibacktester:
                 'results': result['results'],
                 'metrics': result['metrics'],
             }
+            self.results_summary = results_summary
                 
         return results_summary
 
+    def plot_permutation_heatmap(self, metric: str = "Sharpe Ratio", save_path: Optional[str] = None, show_plot: bool = True):
+        """
+        Plot a permutation heatmap for the strategies.
+        
+        :param metric: The metric to use for the heatmap.
+        :param save_path: Optional path to save the heatmap.
+        :param show_plot: Whether to show the plot.
+        
+        :return: 
+        """
+
+        # Create a DataFrame for the metrics
+        metrics_list = [
+            {'Strategy': name, metric: result['metrics']['full'][metric]}
+            for name, result in self.results_summary.items()
+        ]
+        metrics_df = pd.DataFrame(metrics_list)
+        metrics_df.set_index('Strategy', inplace=True)
+
+        # Create a heatmap
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(metrics_df, annot=True, fmt=".2f", cmap="coolwarm", linewidths=0.5)
+        plt.title(f"{metric} Heatmap for Strategies")
+        plt.xlabel("Metric")
+        plt.ylabel("Strategies")
+        plt.tight_layout()
+        heatmap_path = os.path.join(self.output_dir, f"multibacktest_{metric.lower().replace(' ', '_')}_heatmap.png") if save_path is None else save_path
+        plt.savefig(heatmap_path)
+        print(f"Heatmap saved to: {heatmap_path}")
+        
+        if show_plot:
+            plt.show()
+        
+        return metrics_df
