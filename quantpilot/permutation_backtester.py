@@ -38,7 +38,15 @@ class PermutationBacktester:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def run_all(self):
+    def run_all(self,
+                backtest_start_date: Optional[str] = None,
+                backtest_end_date: Optional[str] = None,
+                backtest_years: Optional[float] = None,
+                forward_test: bool = False,
+                forward_start_date: Optional[str] = None,
+                forward_end_date: Optional[str] = None,
+                forward_years: Optional[float] = None,
+                ):
         """
         Run the backtest for each threshold value.
         """
@@ -59,7 +67,15 @@ class PermutationBacktester:
                 threshold=threshold
             )
 
-            backtester.run()
+            backtester.run(
+                backtest_start_date=backtest_start_date,
+                backtest_end_date=backtest_end_date,
+                backtest_years=backtest_years,
+                forward_test=forward_test,
+                forward_start_date=forward_start_date,
+                forward_end_date=forward_end_date,
+                forward_years=forward_years
+                )  # Run backtest only
 
             # Plot and save results
             # backtester.plot_results()

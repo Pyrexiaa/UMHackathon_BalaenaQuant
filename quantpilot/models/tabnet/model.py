@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from pytorch_tabnet.tab_model import TabNetClassifier
 from quantpilot.config import TabNetConfig
+from quantpilot.config import BaseConfig
 
 SELECTED_FEATURES = [
     'exchange_whale_ratio',
@@ -52,30 +53,40 @@ class TabNetModel:
         else:
             raise TypeError("Input must be DataFrame or numpy array")
 
-    def predict_signals(self, X):
+    def predict_signals(self, X, threshold: float = None):
         """
         Generate trading signals (-1, 0, 1) based on max probability class
         Args:
             X: Input data (DataFrame or array)
+            threshold: Probability threshold for buy/sell signals
         Returns:
             Array of trading signals (-1=sell, 0=hold, 1=buy)
         """
+        if threshold is None:
+            threshold = BaseConfig.THRESHOLD
+        
         X = self._validate_features(X)
         X_scaled = self.scaler.transform(X)
         probs = self.model.predict_proba(X_scaled)
         
         signals = []
         for p in probs:
-            max_class = np.argmax(p)
+        #     max_class = np.argmax(p)
             
-            if max_class == 0:    # Sell class
-                signals.append(-1)
-            elif max_class == 1:  # Hold class
-                signals.append(0)
-            elif max_class == 2:  # Buy class
-                signals.append(1)
+        #     if max_class == 0:    # Sell class
+        #         signals.append(-1)
+        #     elif max_class == 1:  # Hold class
+        #         signals.append(0)
+        #     elif max_class == 2:  # Buy class
+        #         signals.append(1)
+        #     else:
+        #         signals.append(0)  # Default to hold
+            if p[2] > threshold and p[0] <= threshold:
+                signals.append(1)  # Buy (class 2 prob high, sell prob low)
+            elif p[0] > threshold and p[2] <= threshold:
+                signals.append(-1)  # Sell (class 0 prob high, buy prob low)
             else:
-                signals.append(0)  # Default to hold
+                signals.append(0)  # Hold (neither condition met)
         
         if self.debug:
             self._print_prediction_debug(probs, signals)
@@ -101,6 +112,6 @@ class TabNetModel:
         print("="*50)
 
     # For backward compatibility
-    def predict(self, X):
+    def predict(self, X, threshold: float = None):
         """Alias for predict_signals"""
-        return self.predict_signals(X)
+        return self.predict_signals(X, threshold)

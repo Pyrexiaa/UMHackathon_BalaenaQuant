@@ -16,21 +16,21 @@ class CombinedStrategy(BaseStrategy):
         self.ml_strategy = ml_strategy
         self.method = method
 
-    def generate_signals(self, X: pd.DataFrame) -> pd.Series:
+    def generate_signals(self, X: pd.DataFrame, threshold: float = None) -> pd.Series:
         hmm_signal = self.hmm_strategy.generate_signals(X)
-        ml_signal = self.ml_strategy.generate_signals(X)
+        
+        if threshold is not None:
+            ml_signal = self.ml_strategy.generate_signals(X, threshold=threshold)
+        else:
+            ml_signal = self.ml_strategy.generate_signals(X)
 
         if self.method == 'vote':
+            hmm_ratio = 0.5
+            ml_signal = ml_signal * (1 - hmm_ratio)
+            hmm_signal = hmm_signal * hmm_ratio
             combined = (hmm_signal + ml_signal).apply(
                 lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
             )
-
-        elif self.method == 'ml_priority':
-            combined = ml_signal.where(ml_signal != 0, hmm_signal)
-
-        elif self.method == 'hmm_priority':
-            combined = hmm_signal.where(hmm_signal != 0, ml_signal)
-
         elif self.method == 'and':
             combined = ((hmm_signal == ml_signal) & (hmm_signal != 0)).astype(int) * hmm_signal
 

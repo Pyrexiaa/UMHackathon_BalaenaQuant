@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from .backtester import Backtester  
 
 class Multibacktester:
-    def __init__(self, data: pd.DataFrame, strategies: List, strategy_names: Optional[List[str]] = None,
+    def __init__(self, data: pd.DataFrame, strategies: List, strategy_names: Optional[List[str]] = None, threshold_values: Optional[List[float]] = None,
                  initial_capital: float = 100000, risk_free_rate: float = 0.0, trading_fee: float = 0.0006,
                  qty_per_trade: int = 1, mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following',
                  output_dir: str = "output"):
@@ -35,6 +35,7 @@ class Multibacktester:
         self.entry_exit_logic = entry_exit_logic
         self.results_summary = {}
         self.output_dir = output_dir
+        self.threshold_values = threshold_values
 
         if len(self.strategies) != len(self.strategy_names):
             raise ValueError("strategies and strategy_names must have the same length")
@@ -56,7 +57,8 @@ class Multibacktester:
         """
         results_summary = {}
 
-        for name, strategy in zip(self.strategy_names, self.strategies):
+        # for name, strategy in zip(self.strategy_names, self.strategies):
+        for name, strategy, threshold in zip(self.strategy_names, self.strategies, self.threshold_values):
             print(f"\nRunning backtest for: {name}")
             bt = Backtester(
                 data=self.data,
@@ -67,7 +69,8 @@ class Multibacktester:
                 trading_fee=self.trading_fee,
                 qty_per_trade=self.qty_per_trade,
                 mode = self.mode,
-                entry_exit_logic = self.entry_exit_logic
+                entry_exit_logic = self.entry_exit_logic,
+                threshold=threshold,
             )
             result = bt.run(
                 backtest_start_date=backtest_start_date,

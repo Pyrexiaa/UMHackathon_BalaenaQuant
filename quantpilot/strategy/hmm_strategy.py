@@ -20,13 +20,21 @@ class HMMStrategy(BaseStrategy):
         """
         hmm_state = X['hmm_state']
         
-        signal = hmm_state.map({
-            0: -1,  # Sell
-            2: -1,  # Sell
-            1:  1,  # Buy
-            3:  1,  # Buy
-            4:  0   # Hold
-        })
-
+        # signal = hmm_state.map({
+        #     0: -1,  # Sell
+        #     2: -1,  # Sell
+        #     1:  1,  # Buy
+        #     3:  1,  # Buy 
+        #     4:  0   # Hold
+        # })
+        signals = pd.Series(0, index=X.index)
+        
+        signals[(hmm_state == 0) & (X['miner_supply_ratio'] < -1) & (X['transactions_count_inflow'] < 0) & (X['exchange_whale_ratio'] > 1) & (X['exchange_supply_ratio'] > 1)] = -1
+        signals[(hmm_state == 1) & (X['miner_supply_ratio'] > 1)] = 1
+        signals[(hmm_state == 2) & (X['miner_supply_ratio'] < 0) & (X['transactions_count_inflow'] < 0) ] = -1
+        signals[(hmm_state == 3) & (X['exchange_supply_ratio'] < 0)] = 1
+        signals[hmm_state == 4] = 0
+        
         # Ensure index matches original input
-        return pd.Series(signal.values, index=X.index)
+        # return pd.Series(signal.values, index=X.index)
+        return signals

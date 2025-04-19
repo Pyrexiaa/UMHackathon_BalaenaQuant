@@ -93,9 +93,9 @@ class XGBoostModel(BaseModel):
                         probs = self.model.predict_proba(X_window[-1:])[0]
                         
                         # Apply threshold rules
-                        if probs[0] > buy_thresh and probs[2] <= sell_thresh:
+                        if probs[2] > buy_thresh and probs[0] <= sell_thresh:
                             pred = 1  # Buy
-                        elif probs[2] > sell_thresh and probs[0] <= buy_thresh:
+                        elif probs[0] > sell_thresh and probs[2] <= buy_thresh:
                             pred = -1  # Sell
                         else:
                             pred = 0  # Hold
