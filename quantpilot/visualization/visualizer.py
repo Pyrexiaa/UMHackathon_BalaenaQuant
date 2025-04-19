@@ -1,47 +1,63 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import glob
 import os
 import json
+import glob
 
 st.set_page_config(layout="wide")
 st.title("Multistrategy Backtest Visualization")
 
-# Find all portfolio CSVs in the output folder
-portfolio_files = sorted(glob.glob("output/portfolio_*.csv"))
+# Read all meta_*.json files to get run metadata
+meta_files = sorted(glob.glob("output/meta_*.json"))
 
-if not portfolio_files:
-    st.error("No portfolio CSV files found in the 'output' directory.")
+if not meta_files:
+    st.error("No metadata files found. Please run a backtest first.")
     st.stop()
 
-# Create one tab per strategy
-strategy_tabs = st.tabs([os.path.basename(f).replace("portfolio_", "").replace(".csv", "") for f in portfolio_files])
+# Extract portfolio paths from metadata files
+strategies = []
+for meta_file in meta_files:
+    try:
+        with open(meta_file, "r") as f:
+            meta = json.load(f)
+        
+        strategy_name = os.path.basename(meta_file).replace("meta_", "").replace(".json", "")
+        portfolio_file = f"output/portfolio_{strategy_name}.csv"
+        if not os.path.exists(portfolio_file):
+            continue  # skip if portfolio file is missing
+        
+        strategies.append({
+            "name": strategy_name,
+            "meta_path": meta_file,
+            "portfolio_path": portfolio_file,
+            "meta": meta
+        })
+    except Exception as e:
+        st.warning(f"Error reading metadata file {meta_file}: {e}")
 
-for tab, filepath in zip(strategy_tabs, portfolio_files):
+if not strategies:
+    st.error("No valid strategy data found.")
+    st.stop()
+
+# Create a tab for each strategy
+strategy_tabs = st.tabs([s["name"] for s in strategies])
+
+for tab, strat in zip(strategy_tabs, strategies):
     with tab:
-        strategy_name = os.path.basename(filepath).replace("portfolio_", "").replace(".csv", "")
-        st.subheader(f"Strategy: {strategy_name}")
+        st.subheader(f"Strategy: {strat['name']}")
 
-        df = pd.read_csv(filepath, parse_dates=True, index_col=0)
+        df = pd.read_csv(strat["portfolio_path"], parse_dates=True, index_col=0)
+        meta = strat["meta"]
 
-        # Load metadata and slice periods
-        meta_path = filepath.replace("portfolio_", "meta_").replace(".csv", ".json")
-        if os.path.exists(meta_path):
-            with open(meta_path, 'r') as f:
-                meta = json.load(f)
+        # Backtest and forward periods
+        backtest_start = pd.to_datetime(meta['backtest']['start'])
+        backtest_end = pd.to_datetime(meta['backtest']['end'])
+        forward_start = pd.to_datetime(meta['forward']['start']) if 'forward' in meta else None
+        forward_end = pd.to_datetime(meta['forward']['end']) if 'forward' in meta else None
 
-            backtest_start = pd.to_datetime(meta['backtest']['start'])
-            backtest_end = pd.to_datetime(meta['backtest']['end'])
-            forward_start = pd.to_datetime(meta['forward']['start']) if 'forward' in meta else None
-            forward_end = pd.to_datetime(meta['forward']['end']) if 'forward' in meta else None
-
-            df_backtest = df.loc[backtest_start:backtest_end]
-            df_forward = df.loc[forward_start:forward_end] if forward_start else pd.DataFrame()
-        else:
-            df_backtest = df
-            df_forward = pd.DataFrame()
-            st.warning("Metadata file not found. Showing only full-period data.")
+        df_backtest = df.loc[backtest_start:backtest_end]
+        df_forward = df.loc[forward_start:forward_end] if forward_start else pd.DataFrame()
 
         # Equity Curve
         if 'equity' in df.columns:
@@ -63,7 +79,7 @@ for tab, filepath in zip(strategy_tabs, portfolio_files):
             if not df_forward.empty:
                 st.area_chart(df_forward['drawdown'])
 
-        # Trading Signals (full period view)
+        # Trading Signals
         if 'price' in df.columns and 'signal' in df.columns:
             st.markdown("### 🔄 Trading Signals")
             fig, ax = plt.subplots(figsize=(14, 6))
@@ -79,3 +95,10 @@ for tab, filepath in zip(strategy_tabs, portfolio_files):
             ax.set_ylabel("Price")
             ax.legend()
             st.pyplot(fig)
+
+# Cleanup: delete all meta_*.json files after displaying
+for meta_file in meta_files:
+    try:
+        os.remove(meta_file)
+    except Exception as e:
+        st.warning(f"Could not delete {meta_file}: {e}")
