@@ -1,5 +1,5 @@
 # Data Ingestion
-The <LIBRARY_NAME> ingestion module enables users to fetch and preprocess data from various providers using either API-based clients or custom topic loaders. It leverages the cybotrade-resource package to streamline the data collection process for alpha research, analysis, and strategy development.
+The QuantPilot ingestion module enables users to fetch and preprocess data from various providers using either API-based clients or custom topic loaders. It leverages the cybotrade-resource package to streamline the data collection process for alpha research, analysis, and strategy development.
 
 ## Loaders
 ### Base Loader `base_loader.py`
