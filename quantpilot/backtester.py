@@ -45,6 +45,10 @@ class Backtester:
         # create output directory if not exits
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
+        
+        if not isinstance(data.index, pd.DatetimeIndex):
+            data['datetime'] = pd.to_datetime(data['datetime'])
+            data.set_index('datetime', inplace=True)
 
     def run(self,
             backtest_start_date: Optional[str] = None,
