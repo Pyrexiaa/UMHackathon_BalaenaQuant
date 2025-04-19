@@ -6,7 +6,7 @@ import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../quantpilot')))
 
-from models.xgboost.model import XGBoostModel
+from quantpilot.models.xgboost.model import XGBoostModel
 from sklearn.model_selection import train_test_split
 
 # ----- Step 1: Create toy features and labels -----
