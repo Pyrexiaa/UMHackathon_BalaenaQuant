@@ -20,6 +20,7 @@ import json
 from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score
 from .constants import (ASSUMPTION_1,ASSUMPTION_2,ASSUMPTION_3,ASSUMPTION_4,ASSUMPTION_5,ASSUMPTION_6, ASSUMPTION_7, ASSUMPTION_8)
 from sklearn.model_selection import TimeSeriesSplit
+from scipy.stats import f_oneway
 
 import sys
 
@@ -42,6 +43,21 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 class XGBoostTradingModel:
     def __init__(self):
+        self.ALL_ON_CHAIN_FEATURES = [
+            "difficulty", "estimated_leverage_ratio", "addresses_count_active", 
+            "addresses_count_sender", "addresses_count_receiver", "exchange_whale_ratio", 
+            "coinbase_premium_gap", "coinbase_premium_index", "coinbase_premium_gap_usdt_adjusted", 
+            "coinbase_premium_index_usdt_adjusted", "taker_buy_volume", "taker_sell_volume", 
+            "taker_buy_ratio", "taker_sell_ratio", "taker_buy_sell_ratio", "blockreward", 
+            "blockreward_usd", "fees_transaction_mean", "fees_transaction_mean_usd", 
+            "fees_transaction_median", "fees_transaction_median_usd", "miner_supply_ratio", 
+            "addresses_count_inflow", "addresses_count_outflow", "exchange_supply_ratio", 
+            "transactions_count_inflow", "tokens_transferred_total", "tokens_transferred_mean", 
+            "tokens_transferred_median", "transactions_count_inflow", "transactions_count_outflow", 
+            "long_liquidations", "short_liquidations", "long_liquidations_usd", 
+            "short_liquidations_usd", "open_price", "high_price", "low_price", "close_price", 
+            "volume", "open_interest"
+        ]
         self.model = None
         self.scaler = StandardScaler()
         self.features = None
@@ -56,97 +72,6 @@ class XGBoostTradingModel:
         self.optimal_buy_thresh = 0.6  # Default higher threshold for buys
         self.optimal_sell_thresh = 0.4  # Default lower threshold for sells
     
-    '''
-    method to loop window
-    '''
-    # def optimize_parameters(self, X: np.ndarray, y: np.ndarray):
-    #     """
-    #     Optimize window size and thresholds using walk-forward validation.
-    #     Called internally during training.
-    #     """
-    #     best_score = -np.inf
-    #     best_params = {}
-        
-    #     # Convert y to numpy array if it's not already
-    #     y = np.array(y)
-        
-    #     # Get unique classes in the full dataset
-    #     unique_classes = np.unique(y)
-    #     num_classes = len(unique_classes)
-        
-    #     # Ensure we have all 3 classes (0, 1, 2)
-    #     if num_classes != 3:
-    #         print(f"Warning: Expected 3 classes but found {num_classes}. Using default parameters.")
-    #         return
-            
-    #     for window_size in self.WINDOW_SIZES:
-    #         if window_size >= len(X):
-    #             continue
-                
-    #         for buy_thresh in self.THRESHOLDS:
-    #             for sell_thresh in [t for t in self.THRESHOLDS if t < buy_thresh]:
-    #                 scores = []
-    #                 valid_windows = 0
-
-    #                 print(f"Trying window={window_size}, buy={buy_thresh}, sell={sell_thresh}")
-
-                    
-    #                 for i in range(window_size, len(X)):
-    #                     # Get current window data
-    #                     X_window = X[i-window_size:i]
-    #                     y_window = y[i-window_size:i]
-                        
-    #                     # Check if window has all 3 classes
-    #                     window_classes = np.unique(y_window)
-    #                     if len(window_classes) != 3:
-    #                         continue  # Skip windows missing classes
-                            
-    #                     valid_windows += 1
-                        
-    #                     # Clone the base model for this window
-    #                     window_model = XGBClassifier(
-    #                         objective='multi:softprob',
-    #                         num_class=3,
-    #                         n_estimators=50,  # Smaller for faster training
-    #                         random_state=42
-    #                     )
-                        
-    #                     # Train on window
-    #                     window_model.fit(X_window, y_window)
-                        
-    #                     # Predict next step
-    #                     probs = window_model.predict_proba(X[i-1:i])[0]
-                        
-    #                     # Apply threshold rules
-    #                     if probs[0] > buy_thresh and probs[2] <= sell_thresh:
-    #                         pred = 1  # Buy
-    #                     elif probs[2] > sell_thresh and probs[0] <= buy_thresh:
-    #                         pred = -1  # Sell
-    #                     else:
-    #                         pred = 0  # Hold
-                            
-    #                     # Score prediction
-    #                     scores.append(1 if pred == y[i] else 0)
-                    
-    #                 if valid_windows > 0 and scores:
-    #                     avg_score = np.mean(scores)
-    #                     if avg_score > best_score:
-    #                         best_score = avg_score
-    #                         best_params = {
-    #                             'window_size': window_size,
-    #                             'buy_thresh': buy_thresh,
-    #                             'sell_thresh': sell_thresh
-    #                         }
-    #                         print(f"New best: Window={window_size}, Buy={buy_thresh}, Sell={sell_thresh}, Score={avg_score:.4f}")
-        
-    #     if best_params:
-    #         self.optimal_window = best_params['window_size']
-    #         self.optimal_buy_thresh = best_params['buy_thresh']
-    #         self.optimal_sell_thresh = best_params['sell_thresh']
-    #         print(f"\nOptimized parameters - Window: {self.optimal_window}, Buy Threshold: {self.optimal_buy_thresh}, Sell Threshold: {self.optimal_sell_thresh}")
-    #     else:
-    #         print("Warning: Parameter optimization failed. Using defaults.")
-
     def optimize_parameters(self, X: np.ndarray, y: np.ndarray):
         """Use window size 48 and threshold 0.3 for quick testing."""
         # Convert y to numpy array if it's not already
@@ -361,221 +286,45 @@ class XGBoostTradingModel:
             df['2024-01-01':'2025-03-31']
         )
 
-    def prepare_features(self, df):
-        # Setup directories
-        os.makedirs("assumption_analysis", exist_ok=True)
-        
-        # Data structures
-        results = []
-        assumption_stats = []
-        
-        # Create combined comparison figure
-        plt.figure(figsize=(20, 25))
-        
-        # Process each assumption
-        for i, (assumption_name, features) in enumerate([
-            ("Assumption 1", ASSUMPTION_1),
-            ("Assumption 2", ASSUMPTION_2),
-            ("Assumption 3", ASSUMPTION_3),
-            ("Assumption 4", ASSUMPTION_4),
-            ("Assumption 5", ASSUMPTION_5),
-            ("Assumption 6", ASSUMPTION_6),
-            ("Assumption 7", ASSUMPTION_7),
-            ("Assumption 8", ASSUMPTION_8),
-        ]):
-            # Prepare data
-            feature_cols = [f for f in features if f != "target" and f in df.columns]
-            if not feature_cols:
-                print(f"Skipping {assumption_name} - no valid features")
-                continue
-                
-            if "target" not in df.columns:
-                valid_df = df[feature_cols].dropna()
+    def prepare_features(self, df, plot_dir="plots"):
+        if 'target' not in df.columns:
+            raise ValueError("DataFrame must contain 'target' column")
+
+        # Create directory if it doesn't exist
+        os.makedirs(plot_dir, exist_ok=True)
+
+        features = [f for f in self.ALL_ON_CHAIN_FEATURES if f in df.columns]
+        anova_results = {}
+
+        for feature in features:
+            groups = []
+            for target_value in sorted(df['target'].unique()):
+                groups.append(df[df['target'] == target_value][feature].dropna())
+
+            f_val, p_val = f_oneway(*groups)
+            anova_results[feature] = {'F-value': f_val, 'p-value': p_val}
+
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(x='target', y=feature, data=df)
+
+            # Format p-value in scientific notation if too small
+            if p_val < 0.0001:
+                p_text = f"ANOVA p-value: {p_val:.2e}"
             else:
-                valid_df = df[feature_cols + ["target"]].dropna()
-                
-            if len(valid_df) < 10:  # Minimum sample size
-                print(f"Skipping {assumption_name} - not enough samples ({len(valid_df)})")
-                continue
-                
-            # Split into positive and negative target groups if target exists
-            if "target" in valid_df.columns:
-                pos_group = valid_df[valid_df["target"] > 0][feature_cols]
-                neg_group = valid_df[valid_df["target"] <= 0][feature_cols]
-            else:
-                pos_group = valid_df[feature_cols]
-                neg_group = pd.DataFrame(columns=feature_cols)
-                
-            # Calculate statistics
-            feature_stats = []
-            p_values = []
-            
-            for feature in feature_cols:
-                try:
-                    # T-test between positive and negative groups
-                    if len(pos_group) >= 2 and len(neg_group) >= 2:
-                        t_stat, ttest_p = ttest_ind(pos_group[feature], neg_group[feature])
-                    else:
-                        t_stat, ttest_p = np.nan, np.nan
-                    
-                    # Correlation with target (if target exists)
-                    if "target" in valid_df.columns and len(valid_df[feature].unique()) > 1:
-                        corr, corr_p = pearsonr(valid_df[feature], valid_df["target"])
-                    else:
-                        corr, corr_p = np.nan, np.nan
-                    
-                    # Use t-test p-value as primary metric
-                    p_values.append(ttest_p)
-                    
-                    feature_stats.append({
-                        'feature': feature,
-                        'mean': valid_df[feature].mean(),
-                        'std': valid_df[feature].std(),
-                        't_statistic': t_stat,
-                        't_test_p': ttest_p,
-                        'correlation': corr,
-                        'correlation_p': corr_p,
-                        'pos_mean': pos_group[feature].mean() if len(pos_group) > 0 else np.nan,
-                        'neg_mean': neg_group[feature].mean() if len(neg_group) > 0 else np.nan
-                    })
-                except Exception as e:
-                    print(f"Error processing {feature} in {assumption_name}: {str(e)}")
-                    p_values.append(np.nan)
-                    feature_stats.append({
-                        'feature': feature,
-                        'error': str(e)
-                    })
-            
-            mean_p = np.nanmean(p_values)
-            median_p = np.nanmedian(p_values)
-            
-            # Store results
-            assumption_stats.append({
-                'assumption': assumption_name,
-                'mean_p_value': mean_p,
-                'median_p_value': median_p,
-                'n_features': len(feature_cols),
-                'significant_features': sum(p < 0.05 for p in p_values if not np.isnan(p)),
-                'features': feature_cols
-            })
-            
-            results.extend([{**stat, 'assumption': assumption_name} for stat in feature_stats])
-            
-            # ========================================
-            # Create individual assumption plot
-            # ========================================
-            plt.figure(figsize=(14, 8))
-            for j, feature in enumerate(feature_cols):
-                # Plot distribution for positive and negative groups if target exists
-                if "target" in valid_df.columns and len(pos_group) > 0 and len(neg_group) > 0:
-                    sns.kdeplot(pos_group[feature], 
-                            label=f"{feature} (Pos)", 
-                            color=plt.cm.tab20(j), 
-                            linestyle='--')
-                    sns.kdeplot(neg_group[feature], 
-                            label=f"{feature} (Neg)", 
-                            color=plt.cm.tab20(j))
-                else:
-                    sns.kdeplot(valid_df[feature], 
-                            label=feature,
-                            color=plt.cm.tab20(j))
-            
-            plot_title = f"{assumption_name}\nMean p: {mean_p:.3f} | Median p: {median_p:.3f}"
-            if "target" not in valid_df.columns:
-                plot_title += "\n(No target available for t-tests)"
-                
-            plt.title(plot_title, fontsize=14)
-            plt.xlabel("Feature Value")
-            plt.ylabel("Density")
-            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            plt.tight_layout()
-            
-            individual_path = f"assumption_analysis/{assumption_name.replace(' ', '_')}.png"
-            plt.savefig(individual_path, bbox_inches='tight', dpi=150)
-            plt.close()
-            
-            # ========================================
-            # Add to combined plot
-            # ========================================
-            ax = plt.subplot(4, 2, i+1)
-            for j, feature in enumerate(feature_cols):
-                if "target" in valid_df.columns and len(pos_group) > 0 and len(neg_group) > 0:
-                    sns.kdeplot(pos_group[feature], 
-                            color=plt.cm.tab20(j), 
-                            linestyle='--', 
-                            ax=ax)
-                    sns.kdeplot(neg_group[feature], 
-                            color=plt.cm.tab20(j), 
-                            ax=ax)
-                else:
-                    sns.kdeplot(valid_df[feature], 
-                            color=plt.cm.tab20(j), 
-                            ax=ax)
-            
-            ax.set_title(f"{assumption_name}\n(avg p={mean_p:.2f})", fontsize=10)
-            ax.set_xlabel("")
-            
-            if i == 0:
-                ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
-        
-        # Finalize combined plot
-        plt.suptitle("Feature Distributions Across All Assumptions", y=1.02, fontsize=16)
-        plt.tight_layout()
-        combined_path = "assumption_analysis/all_assumptions_combined.png"
-        plt.savefig(combined_path, bbox_inches='tight', dpi=150)
-        plt.close()
-        
-        # Convert to DataFrames
-        stats_df = pd.DataFrame(assumption_stats).sort_values('mean_p_value')
-        details_df = pd.DataFrame(results)
-        
-        # Print summary
-        print("\n" + "="*50)
-        print("ASSUMPTION STATISTICS SUMMARY (Using t-tests)")
-        print("="*50)
-        print(tabulate(
-            stats_df[['assumption', 'mean_p_value', 'median_p_value', 
-                    'n_features', 'significant_features']],
-            headers=['Assumption', 'Mean p', 'Median p', 'Features', 'Sig Features'],
-            tablefmt='grid',
-            floatfmt=".4f",
-            showindex=False
-        ))
-        
-        if "target" in df.columns:
-            print("\n" + "="*50)
-            print("TOP FEATURES BY T-TEST SIGNIFICANCE")
-            print("="*50)
-            for assumption in stats_df['assumption']:
-                print(f"\n{assumption}:")
-                df = details_df[details_df['assumption'] == assumption]
-                print(tabulate(
-                    df.sort_values('t_test_p')[['feature', 't_statistic', 't_test_p', 
-                                            'pos_mean', 'neg_mean']],
-                    headers=['Feature', 't-stat', 'p-value', 'Pos Mean', 'Neg Mean'],
-                    tablefmt='grid',
-                    floatfmt=".4f"
-                ))
-        
-        print("\n" + "="*50)
-        print(f"Saved plots to: {os.path.abspath('assumption_analysis')}")
-        print("="*50)
-        
-        # Return all available features sorted by best assumptions
-        best_features = []
-        for _, row in stats_df.iterrows():
-            best_features.extend([f for f in row['features'] if f not in best_features and f in df.columns])
-        
-        # Fallback to original features if no assumptions worked
-        if not best_features:
-            original_features = [
-                "tokens_transferred_mean",
-                "tokens_transferred_median",
-                "tokens_transferred_total",
-            ]
-            best_features = [f for f in original_features if f in df.columns]
-        
-        return df[best_features].dropna().reset_index(drop=True)
+                p_text = f"ANOVA p-value: {p_val:.4f}"
+
+            plt.title(f'Distribution of {feature} by Target Group\n{p_text}')
+            plt.xlabel('Target Class')
+            plt.ylabel(feature)
+
+            # Save the plot to a file (before plt.show())
+            plot_filename = os.path.join(plot_dir, f"{feature}_boxplot.png")
+            plt.savefig(plot_filename, bbox_inches='tight', dpi=300)
+            plt.close()  # Close the figure to free memory
+
+        anova_df = pd.DataFrame.from_dict(anova_results, orient='index')
+        anova_df.sort_values('p-value', inplace=True)
+        return anova_df
 
     
     def normalize_data(self,df, previous_scaling=None):
@@ -824,12 +573,11 @@ def plot_signals(df, signals):
     plt.tight_layout()
     plt.show()
 
-
-def main():
-    dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
-    model = XGBoostTradingModel()
-    train , test = model.load_csv(dataset_path)
-    test_feat = model.prepare_features(test)
+# def main():
+#     dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
+#     model = XGBoostTradingModel()
+#     train , test = model.load_csv(dataset_path)
+#     test_feat = model.prepare_features(test)
     # test_feat = model.normalize_data(test_feat, SCALING_PATH)
     # X_test = test_feat.drop(columns=['target'])
     # y_test = test_feat["target"]
@@ -890,6 +638,18 @@ def main():
 
     #  # Evaluate performance
     # model.evaluate_performance(equity, trades,"Test")
+
+def main():
+    dataset_path = "experimental/datasets/btc_data_with_target_latest_v2.csv"
+    model = XGBoostTradingModel()
+    df_train, df_test = model.load_csv(dataset_path)
+
+    # Save plots to "plots/" folder
+    anova_results = model.prepare_features(df_train, plot_dir="plots")
+
+    print("\nANOVA Results (sorted by p-value):")
+    print(anova_results)
+    anova_results.to_csv("anova_results.csv")
 
 if __name__ == "__main__":
     main()
