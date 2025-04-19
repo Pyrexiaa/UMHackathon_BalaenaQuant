@@ -2,7 +2,7 @@
 
 ### Prerequisites
 Ensure you have:
-- Installed QuantPilot and its dependencies, refer to <link>
+- Installed QuantPilot and its dependencies, refer to [README.md](https://github.com/Pyrexiaa/UMHackathon_BalaenaQuant/?tab=readme-ov-file#quantpilot)
 - A working Python environment
 - Sample data or your own time series DataFrame (BTC_DATA in this example)
 
