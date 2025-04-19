@@ -4,6 +4,10 @@ XGBoost Trading Strategy Implementation
 import os
 from pathlib import Path
 import pandas as pd
+from tabulate import tabulate
+from scipy.stats import pearsonr, kstest
+import seaborn as sns
+import matplotlib.pyplot as plt
 import numpy as np
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
@@ -357,17 +361,19 @@ class XGBoostTradingModel:
             df['2024-01-01':'2025-03-31']
         )
 
-
     def prepare_features(self, df):
-        # Create directories for saving plots
-        os.makedirs("feature_distributions", exist_ok=True)
-        os.makedirs("assumption_distributions", exist_ok=True)
+        # Setup directories
+        os.makedirs("assumption_analysis", exist_ok=True)
         
-        # Dictionary to store test results
-        assumption_results = {}
+        # Data structures
+        results = []
+        assumption_stats = []
         
-        # Loop through all assumptions
-        for assumption_name, features in [
+        # Create combined comparison figure
+        plt.figure(figsize=(20, 25))
+        
+        # Process each assumption
+        for i, (assumption_name, features) in enumerate([
             ("Assumption 1", ASSUMPTION_1),
             ("Assumption 2", ASSUMPTION_2),
             ("Assumption 3", ASSUMPTION_3),
@@ -376,228 +382,158 @@ class XGBoostTradingModel:
             ("Assumption 6", ASSUMPTION_6),
             ("Assumption 7", ASSUMPTION_7),
             ("Assumption 8", ASSUMPTION_8),
-        ]:
-            # Check if target is in features
-            if "target" not in features:
-                print(f"Warning: 'target' not found in {assumption_name} features")
+        ]):
+            # Prepare data
+            feature_cols = [f for f in features if f != "target" and f in df.columns]
+            if not feature_cols:
                 continue
                 
-            # Get the feature columns (excluding target)
-            feature_cols = [f for f in features if f != "target"]
-            
-            # Check for missing features
-            missing_features = [f for f in feature_cols if f not in df.columns]
-            if missing_features:
-                print(f"Skipping {assumption_name} - Missing features: {missing_features}")
+            valid_df = df[feature_cols + ["target"]].dropna()
+            if len(valid_df) < 10:  # Minimum sample size
                 continue
                 
-            # Prepare data - drop rows with any NA values in these features
-            subset_df = df[features].dropna()
-            
-            if len(subset_df) == 0:
-                print(f"Skipping {assumption_name} - No data after dropping NA values")
-                continue
-                
-            # Split into positive and negative target groups
-            pos_group = subset_df[subset_df["target"] > 0][feature_cols]
-            neg_group = subset_df[subset_df["target"] <= 0][feature_cols]
-            
-            if len(pos_group) < 2 or len(neg_group) < 2:
-                print(f"Skipping {assumption_name} - Not enough samples for t-test")
-                continue
-                
-            # Perform t-tests for each feature and create plots
-            feature_results = {}
+            # Calculate statistics
+            feature_stats = []
             p_values = []
             
-            # Create a figure for the assumption overview
-            n_features = len(feature_cols)
-            n_cols = min(3, n_features)
-            n_rows = int(np.ceil(n_features / n_cols))
-            
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5*n_rows))
-            axes = axes.flatten() if n_features > 1 else [axes]
-            
-            for i, (feature, ax) in enumerate(zip(feature_cols, axes)):
+            for feature in feature_cols:
                 try:
-                    # Statistical test
-                    t_stat, p_value = ttest_ind(pos_group[feature], neg_group[feature])
-                    p_values.append(p_value)
+                    # Normality test
+                    _, norm_p = kstest(valid_df[feature], 'norm')
                     
-                    feature_results[feature] = {
-                        't_statistic': t_stat,
-                        'p_value': p_value,
-                        'pos_mean': pos_group[feature].mean(),
-                        'neg_mean': neg_group[feature].mean(),
-                        'pos_std': pos_group[feature].std(),
-                        'neg_std': neg_group[feature].std(),
-                        'mean_diff': pos_group[feature].mean() - neg_group[feature].mean(),
-                    }
+                    # Correlation with target
+                    if len(valid_df[feature].unique()) > 1:
+                        corr, corr_p = pearsonr(valid_df[feature], valid_df["target"])
+                    else:
+                        corr, corr_p = np.nan, np.nan
                     
-                    # Individual feature plot
-                    plt.figure(figsize=(10, 6))
-                    sns.kdeplot(pos_group[feature], label="Positive Target", color="green", fill=True)
-                    sns.kdeplot(neg_group[feature], label="Negative Target", color="red", fill=True, alpha=0.5)
-                    plt.axvline(feature_results[feature]['pos_mean'], color='green', linestyle='--', linewidth=1)
-                    plt.axvline(feature_results[feature]['neg_mean'], color='red', linestyle='--', linewidth=1)
-                    plt.title(f"{feature}\n(p-value: {p_value:.4f})")
-                    plt.xlabel(feature)
-                    plt.ylabel("Density")
-                    plt.legend()
+                    p_values.append(corr_p)
                     
-                    plot_filename = f"feature_distributions/{assumption_name.replace(' ', '_')}_{feature}.png"
-                    plt.savefig(plot_filename, bbox_inches='tight', dpi=300)
-                    plt.close()
-                    feature_results[feature]['plot_path'] = plot_filename
-                    
-                    # Assumption overview plot
-                    sns.kdeplot(pos_group[feature], label="Positive", color="green", ax=ax, fill=True)
-                    sns.kdeplot(neg_group[feature], label="Negative", color="red", ax=ax, fill=True, alpha=0.5)
-                    ax.axvline(feature_results[feature]['pos_mean'], color='green', linestyle='--', linewidth=1)
-                    ax.axvline(feature_results[feature]['neg_mean'], color='red', linestyle='--', linewidth=1)
-                    ax.set_title(f"{feature}\n(p={p_value:.3f})")
-                    ax.set_xlabel("")
-                    
+                    feature_stats.append({
+                        'feature': feature,
+                        'mean': valid_df[feature].mean(),
+                        'std': valid_df[feature].std(),
+                        'normality_p': norm_p,
+                        'correlation': corr,
+                        'correlation_p': corr_p
+                    })
                 except Exception as e:
-                    print(f"Error testing {feature} in {assumption_name}: {str(e)}")
-                    feature_results[feature] = {'error': str(e)}
-                    ax.set_title(f"{feature}\n(Error)")
+                    p_values.append(np.nan)
+                    feature_stats.append({
+                        'feature': feature,
+                        'error': str(e)
+                    })
             
-            # Remove empty subplots
-            for j in range(i+1, len(axes)):
-                fig.delaxes(axes[j])
+            mean_p = np.nanmean(p_values)
+            median_p = np.nanmedian(p_values)
             
-            # Finalize assumption overview plot
-            plt.suptitle(f"{assumption_name} Feature Distributions", y=1.02, fontsize=14)
+            # Store results
+            assumption_stats.append({
+                'assumption': assumption_name,
+                'mean_p_value': mean_p,
+                'median_p_value': median_p,
+                'n_features': len(feature_cols),
+                'significant_features': sum(p < 0.05 for p in p_values if not np.isnan(p)),
+                'features': feature_cols
+            })
+            
+            results.extend([{**stat, 'assumption': assumption_name} for stat in feature_stats])
+            
+            # ========================================
+            # Create individual assumption plot
+            # ========================================
+            plt.figure(figsize=(14, 8))
+            for j, feature in enumerate(feature_cols):
+                sns.kdeplot(valid_df[feature], 
+                        label=f"{feature} (ρ={feature_stats[j].get('correlation', np.nan):.2f})",
+                        color=plt.cm.tab20(j),
+                        fill=True)
+            
+            plt.title(f"{assumption_name}\nMean p: {mean_p:.3f} | Median p: {median_p:.3f}", fontsize=14)
+            plt.xlabel("Feature Value")
+            plt.ylabel("Density")
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')  # FIXED HERE
             plt.tight_layout()
-            assumption_plot_path = f"assumption_distributions/{assumption_name.replace(' ', '_')}_overview.png"
-            plt.savefig(assumption_plot_path, bbox_inches='tight', dpi=300)
+            
+            individual_path = f"assumption_analysis/{assumption_name.replace(' ', '_')}.png"
+            plt.savefig(individual_path, bbox_inches='tight', dpi=150)
             plt.close()
             
-            # Calculate assumption-level metrics
-            significant_features = [
-                f for f in feature_results 
-                if 'p_value' in feature_results[f] and feature_results[f]['p_value'] < 0.05
-            ]
-            mean_p_value = np.mean(p_values) if p_values else None
+            # ========================================
+            # Add to combined plot
+            # ========================================
+            ax = plt.subplot(4, 2, i+1)
+            for j, feature in enumerate(feature_cols):
+                sns.kdeplot(valid_df[feature], 
+                        label=feature,
+                        color=plt.cm.tab20(j),
+                        ax=ax)
             
-            assumption_results[assumption_name] = {
-                'features_tested': feature_cols,
-                'feature_results': feature_results,
-                'num_significant': len(significant_features),
-                'percent_significant': len(significant_features)/len(feature_cols) if feature_cols else 0,
-                'mean_p_value': mean_p_value,
-                'sample_size_pos': len(pos_group),
-                'sample_size_neg': len(neg_group),
-                'assumption_plot_path': assumption_plot_path,
-            }
+            ax.set_title(f"{assumption_name}\n(avg p={mean_p:.2f})", fontsize=10)
+            ax.set_xlabel("")
+            
+            if i == 0:
+                ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
         
-        # Sort assumptions by mean p-value (best first)
-        sorted_assumptions = sorted(
-            assumption_results.items(),
-            key=lambda x: x[1]['mean_p_value'] if x[1]['mean_p_value'] is not None else float('inf')
-        )
+        # Finalize combined plot
+        plt.suptitle("Feature Distributions Across All Assumptions", y=1.02, fontsize=16)
+        plt.tight_layout()
+        combined_path = "assumption_analysis/all_assumptions_combined.png"
+        plt.savefig(combined_path, bbox_inches='tight', dpi=150)
+        plt.close()
         
-        # Print summary of results
+        # Convert to DataFrames
+        stats_df = pd.DataFrame(assumption_stats).sort_values('mean_p_value')
+        details_df = pd.DataFrame(results)
+        
+        # Print summary
         print("\n" + "="*50)
-        print("ASSUMPTION TESTING SUMMARY (Sorted by Mean p-value)")
+        print("ASSUMPTION STATISTICS SUMMARY")
         print("="*50)
-        summary_data = []
-        for assumption, results in sorted_assumptions:
-            summary_data.append([
-                assumption,
-                len(results['features_tested']),
-                results['num_significant'],
-                f"{results['percent_significant']:.1%}",
-                f"{results['mean_p_value']:.4f}" if results['mean_p_value'] is not None else "N/A",
-                results['sample_size_pos'],
-                results['sample_size_neg'],
-                results['assumption_plot_path']
-            ])
+        print(tabulate(
+            stats_df[['assumption', 'mean_p_value', 'median_p_value', 
+                    'n_features', 'significant_features']],
+            headers=['Assumption', 'Mean p', 'Median p', 'Features', 'Sig Features'],
+            tablefmt='grid',
+            floatfmt=".4f",
+            showindex=False
+        ))
         
-        print(tabulate(summary_data, 
-                    headers=["Assumption", "Features", "Sig. Features", "% Sig.", 
-                            "Mean p-value", "Pos Samples", "Neg Samples", "Plot Path"],
-                    tablefmt="grid",
-                    floatfmt=".4f"))
-        
-        # Print detailed results for each assumption
         print("\n" + "="*50)
-        print("DETAILED FEATURE TEST RESULTS")
+        print("TOP FEATURES BY CORRELATION")
         print("="*50)
+        for assumption in stats_df['assumption']:
+            print(f"\n{assumption}:")
+            df = details_df[details_df['assumption'] == assumption]
+            print(tabulate(
+                df.sort_values('correlation_p')[['feature', 'correlation', 'correlation_p']],
+                headers=['Feature', 'Correlation', 'p-value'],
+                tablefmt='grid',
+                floatfmt=".4f"
+            ))
         
-        detailed_results = []
-        for assumption, results in sorted_assumptions:
-            print(f"\n{assumption.upper()} (Mean p-value: {results['mean_p_value']:.4f})")
-            print("-"*(len(assumption) + 20))
-            
-            # Prepare data for table
-            table_data = []
-            for feature, stats in results['feature_results'].items():
-                if 'p_value' in stats:
-                    table_data.append([
-                        feature,
-                        stats['t_statistic'],
-                        stats['p_value'],
-                        stats['pos_mean'],
-                        stats['neg_mean'],
-                        stats['mean_diff'],
-                        "YES" if stats['p_value'] < 0.05 else "no",
-                        stats['plot_path'] if 'plot_path' in stats else ""
-                    ])
-            
-            # Print the table
-            print(tabulate(table_data,
-                        headers=["Feature", "t-stat", "p-value", "Pos Mean", "Neg Mean", 
-                                "Mean Diff", "Significant", "Plot Path"],
-                        tablefmt="grid",
-                        floatfmt=".4f"))
-            
-            # Store for saving
-            for feature, stats in results['feature_results'].items():
-                if 'p_value' in stats:
-                    detailed_results.append({
-                        'assumption': assumption,
-                        'feature': feature,
-                        't_statistic': stats['t_statistic'],
-                        'p_value': stats['p_value'],
-                        'pos_mean': stats['pos_mean'],
-                        'neg_mean': stats['neg_mean'],
-                        'pos_std': stats['pos_std'],
-                        'neg_std': stats['neg_std'],
-                        'mean_diff': stats['mean_diff'],
-                        'significant': stats['p_value'] < 0.05,
-                        'plot_path': stats.get('plot_path', ''),
-                        'assumption_mean_p_value': results['mean_p_value'],
-                        'assumption_plot_path': results['assumption_plot_path']
-                    })
-        
-        # Save detailed results to DataFrame
-        self.assumption_test_results = pd.DataFrame(detailed_results)
-        
-        # Print message about saved plots
         print("\n" + "="*50)
-        print(f"Feature plots saved to: {os.path.abspath('feature_distributions')}")
-        print(f"Assumption overview plots saved to: {os.path.abspath('assumption_distributions')}")
+        print(f"Saved plots to: {os.path.abspath('assumption_analysis')}")
         print("="*50)
         
-        # Return features from best performing assumption
-        if sorted_assumptions:
-            best_assumption = sorted_assumptions[0][0]
-            best_features = [f for f in sorted_assumptions[0][1]['features_tested'] if f in df.columns]
-            print(f"\nUsing features from best performing assumption: {best_assumption}")
-            return df[best_features].dropna().reset_index(drop=True)
+        # Return all available features sorted by best assumptions
+        best_features = []
+        for _, row in stats_df.iterrows():
+            best_features.extend([f for f in row['features'] if f not in best_features and f in df.columns])
         
         # Fallback to original features if no assumptions worked
-        required_features = [
-            "tokens_transferred_mean",
-            "tokens_transferred_median",
-            "tokens_transferred_total",
-        ]
-        missing_features = [f for f in required_features if f not in df.columns]
-        if missing_features:
-            raise ValueError(f"Missing features: {missing_features}")
-        return df[required_features].dropna().reset_index(drop=True)
+        if not best_features:
+            original_features = [
+                "tokens_transferred_mean",
+                "tokens_transferred_median",
+                "tokens_transferred_total",
+            ]
+            best_features = [f for f in original_features if f in df.columns]
+            # if not best_features:
+            #     raise ValueError("No valid features found in DataFrame")
+        
+        return df[best_features].dropna().reset_index(drop=True)
+
     
     def normalize_data(self,df, previous_scaling=None):
         # Separate features and label
@@ -618,7 +554,6 @@ class XGBoostTradingModel:
         scaled_df["target"] = target
 
         return scaled_df
-    
 
     def get_param_grid(self):
         return {
@@ -852,66 +787,66 @@ def main():
     model = XGBoostTradingModel()
     train , test = model.load_csv(dataset_path)
     test_feat = model.prepare_features(test)
-    test_feat = model.normalize_data(test_feat, SCALING_PATH)
-    X_test = test_feat.drop(columns=['target'])
-    y_test = test_feat["target"]
-     # Prepare metrics storage
-    all_fold_results = []
+    # test_feat = model.normalize_data(test_feat, SCALING_PATH)
+    # X_test = test_feat.drop(columns=['target'])
+    # y_test = test_feat["target"]
+    #  # Prepare metrics storage
+    # all_fold_results = []
 
-    # Use TimeSeriesSplit
-    tscv = TimeSeriesSplit(n_splits=5)
-    for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(train)):
-        print(f"\n=== Fold {fold_idx + 1} ===")
-        train_df = train.iloc[train_idx].copy()
-        val_df = train.iloc[val_idx].copy()
+    # # Use TimeSeriesSplit
+    # tscv = TimeSeriesSplit(n_splits=5)
+    # for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(train)):
+    #     print(f"\n=== Fold {fold_idx + 1} ===")
+    #     train_df = train.iloc[train_idx].copy()
+    #     val_df = train.iloc[val_idx].copy()
 
-        # Feature prep
-        train_feat = model.prepare_features(train_df)
-        val_feat = model.prepare_features(val_df)
+    #     # Feature prep
+    #     train_feat = model.prepare_features(train_df)
+    #     val_feat = model.prepare_features(val_df)
 
-        # Normalize
-        train_feat = model.normalize_data(train_feat)
-        val_feat = model.normalize_data(val_feat, SCALING_PATH)
+    #     # Normalize
+    #     train_feat = model.normalize_data(train_feat)
+    #     val_feat = model.normalize_data(val_feat, SCALING_PATH)
 
-        # Setup for training
-        model.features = train_feat.columns.tolist()
-        X_train = train_feat.drop(columns=["target"])
-        y_train = train_feat["target"]
-        X_val = val_feat.drop(columns=["target"])
-        y_val = val_feat["target"]
+    #     # Setup for training
+    #     model.features = train_feat.columns.tolist()
+    #     X_train = train_feat.drop(columns=["target"])
+    #     y_train = train_feat["target"]
+    #     X_val = val_feat.drop(columns=["target"])
+    #     y_val = val_feat["target"]
 
-        # Train
-        model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
+    #     # Train
+    #     model.train_model(X_train.values, y_train.values, X_val.values, y_val.values)
 
-        # Predict and Evaluate
-        signals = model.predict_signals(X_val.values)
-        model.evaluate_model_performance(y_val, signals, f"Validation Fold {fold_idx+1}")
-        equity, trades, trade_dates = model.backtest(val_df, signals)
-        fold_results = model.evaluate_performance(equity, trades, f"Validation Fold {fold_idx+1}")
-        all_fold_results.append(fold_results)
+    #     # Predict and Evaluate
+    #     signals = model.predict_signals(X_val.values)
+    #     model.evaluate_model_performance(y_val, signals, f"Validation Fold {fold_idx+1}")
+    #     equity, trades, trade_dates = model.backtest(val_df, signals)
+    #     fold_results = model.evaluate_performance(equity, trades, f"Validation Fold {fold_idx+1}")
+    #     all_fold_results.append(fold_results)
 
-        # Optional: Save model per fold
-        model.save_model(fold=fold_idx + 1)
+    #     # Optional: Save model per fold
+    #     model.save_model(fold=fold_idx + 1)
 
-    # Convert results to DataFrame
-    results_df = pd.DataFrame(all_fold_results)
-    print("\n=== Cross-Validation Summary ===")
-    print(results_df.describe())
+    # # Convert results to DataFrame
+    # results_df = pd.DataFrame(all_fold_results)
+    # print("\n=== Cross-Validation Summary ===")
+    # print(results_df.describe())
 
-    # Save overall results
-    results_df.to_csv(f"{RESULTS_DIR}/cv_fold_metrics.csv", index=False)
+    # # Save overall results
+    # results_df.to_csv(f"{RESULTS_DIR}/cv_fold_metrics.csv", index=False)
 
-    # Test set
-    signals = model.predict_signals(X_test.values)
-    model.evaluate_model_performance(y_test, signals, "Test")
-    equity, trades, trade_dates = model.backtest(test, signals)
-    test_results = model.evaluate_performance( equity, trades,"Test")
+    # # Test set
+    # signals = model.predict_signals(X_test.values)
+    # model.evaluate_model_performance(y_test, signals, "Test")
+    # equity, trades, trade_dates = model.backtest(test, signals)
+    # test_results = model.evaluate_performance( equity, trades,"Test")
     
-    # Save model
-    model.save_model()
+    # # Save model
+    # model.save_model()
 
-     # Evaluate performance
-    model.evaluate_performance(equity, trades,"Test")
+    #  # Evaluate performance
+    # model.evaluate_performance(equity, trades,"Test")
 
 if __name__ == "__main__":
     main()
