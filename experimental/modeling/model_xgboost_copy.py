@@ -16,8 +16,23 @@ from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 # Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest_v2.csv"
-MODEL_DIR = Path("quantpilot/models_weights/xgboost_final")
+MODEL_DIR = Path("quantpilot/models_weights/xgboost_final_testing")
 SCALING_PATH = MODEL_DIR / "scaler.pkl"
+
+'''
+Best parameters found:
+{'colsample_bytree': 0.8, 'gamma': 0, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 1, 'n_estimators': 100, 'subsample': 0.8}
+{'colsample_bytree': 0.8, 'gamma': 0, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 1, 'n_estimators': 100, 'subsample': 0.8}
+{'colsample_bytree': 0.8, 'gamma': 0.1, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 3, 'n_estimators': 50, 'subsample': 0.7}
+
+XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final/xgboost_model.pkl"
+    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final/scaler.pkl"
+'''
+
+'''
+XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final_1/xgboost_model.pkl"
+XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final_1/scaler.pkl"
+'''
 
 # Configuration
 class BaseConfig:
@@ -77,88 +92,182 @@ class XGBoostTradingModel:
         
         return scaled_df
 
-    def train_model(self, X_train, y_train, X_val, y_val):
-        """Optimized training with faster GridSearchCV"""
-        # Base parameters
-        base_params = {
-            "objective": "multi:softprob",
-            "num_class": 3,
-            "eval_metric": ["mlogloss", "merror"],
-            "early_stopping_rounds": 20,
-            "random_state": 42,
-            "n_jobs": -1
-        }
+# ver 1
+    # def train_model(self, X_train, y_train, X_val, y_val):
+    #     """Optimized training with faster GridSearchCV"""
+    #     # Base parameters
+    #     base_params = {
+    #         "objective": "multi:softprob",
+    #         "num_class": 3,
+    #         "eval_metric": ["mlogloss", "merror"],
+    #         "early_stopping_rounds": 20,
+    #         "random_state": 42,
+    #         "n_jobs": -1
+    #     }
 
-        # Optimized parameter grid
-        param_grid = {
-            'learning_rate': [0.05, 0.1],
-            'max_depth': [3, 4],
-            'n_estimators': [100],
-            'subsample': [0.8, 0.9],
-            'colsample_bytree': [0.8],
-            'gamma': [0, 0.1],
-            'min_child_weight': [1, 3],
-        }
+    #     # Optimized parameter grid
+    #     param_grid = {
+    #         'learning_rate': [0.05, 0.01],
+    #         'max_depth': [3, 4],
+    #         'n_estimators': [50],
+    #         'subsample': [0.8, 0.7],
+    #         'colsample_bytree': [0.8],
+    #         'gamma': [0, 0.1],
+    #         'min_child_weight': [1, 3],
+    #     }
 
-        # Class weights
-        class_counts = np.bincount(y_train)
-        weights = len(y_train) / (3 * class_counts)
-        sample_weights = np.array([weights[label] for label in y_train])
+    #     # Class weights
+    #     class_counts = np.bincount(y_train)
+    #     weights = len(y_train) / (3 * class_counts)
+    #     sample_weights = np.array([weights[label] for label in y_train])
 
-        # Time Series Cross-Validator
-        tscv = TimeSeriesSplit(n_splits=2)
+    #     # Time Series Cross-Validator
+    #     tscv = TimeSeriesSplit(n_splits=2)
 
-        # Initialize GridSearchCV
-        grid_search = GridSearchCV(
-            estimator=XGBClassifier(**base_params),
-            param_grid=param_grid,
-            scoring='balanced_accuracy',
-            cv=tscv,
-            n_jobs=-1,
-            verbose=1
-        )
+    #     # Initialize GridSearchCV
+    #     grid_search = GridSearchCV(
+    #         estimator=XGBClassifier(**base_params),
+    #         param_grid=param_grid,
+    #         scoring='balanced_accuracy',
+    #         cv=tscv,
+    #         n_jobs=-1,
+    #         verbose=1
+    #     )
 
-        print("\nStarting hyperparameter tuning...")
-        grid_search.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_val, y_val)],
-            sample_weight=sample_weights,
-            verbose=5
-        )
+    #     print("\nStarting hyperparameter tuning...")
+    #     grid_search.fit(
+    #         X_train,
+    #         y_train,
+    #         eval_set=[(X_val, y_val)],
+    #         sample_weight=sample_weights,
+    #         verbose=5
+    #     )
 
-        print("\nBest parameters found:")
-        print(grid_search.best_params_)
+    #     print("\nBest parameters found:")
+    #     print(grid_search.best_params_)
 
-        # Store the trained model
-        self.model = grid_search.best_estimator_
+    #     # Store the trained model
+    #     self.model = grid_search.best_estimator_
         
-        # Additional training with best params (optional)
-        print("\nFinal training with best parameters...")
+    #     # Additional training with best params (optional)
+    #     print("\nFinal training with best parameters...")
+    #     self.model.fit(
+    #         X_train,
+    #         y_train,
+    #         eval_set=[(X_val, y_val)],
+    #         sample_weight=sample_weights,
+    #         verbose=10
+    #     )
+
+    def train_model(self, X_train, y_train, X_val, y_val):
+        # Calculate proper class weights
+        class_counts = np.bincount(y_train)
+        total_samples = len(y_train)
+        class_weights = total_samples / (len(class_counts) * class_counts)
+        
+        # More aggressive weighting
+        self.class_weights = {0: 10, 1: 1, 2: 10}  # Adjust based on your class meanings
+        
+        sample_weights = np.array([self.class_weights[label] for label in y_train])
+        
+        # Use the best params from GridSearch but adjust key parameters
+        {'colsample_bytree': 0.8, 'gamma': 0.1, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 3, 'n_estimators': 50, 'subsample': 0.7}
+        best_params = {
+            'objective': 'multi:softprob',
+            'num_class': 3,
+            'colsample_bytree': 0.8,
+            'gamma': 0.1,  # Increased from 0 to prevent overfitting
+            'learning_rate': 0.05,
+            'max_depth': 3,  # Increased from 3
+            'min_child_weight': 3,  # Increased from 1
+            'n_estimators': 50,  # Increased from 100
+            'subsample': 0.8,
+            'scale_pos_weight': class_weights[1],  # For the minority class
+            'eval_metric': ['mlogloss', 'merror'],
+            'early_stopping_rounds': 50
+        }
+        
+        self.model = XGBClassifier(**best_params)
         self.model.fit(
-            X_train,
-            y_train,
+            X_train, y_train,
             eval_set=[(X_val, y_val)],
             sample_weight=sample_weights,
             verbose=10
         )
 
+# ver 1 
+    # def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
+    #     """
+    #     Generate trading signals with rolling window prediction
+    #     Uses strict threshold checks to avoid conflicting signals
+    #     """
+    #     signals = []
+    #     probs = self.model.predict_proba(X)
+        
+    #     for p in probs:
+    #         if p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
+    #             signals.append(1)  # Buy
+    #         elif p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
+    #             signals.append(-1)  # Sell
+    #         else:
+    #             signals.append(0)  # Hold
+        
+    #     return np.array(signals)
+
+
+# ver2 todo
+    # def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
+    #     signals = []
+    #     probs = self.model.predict_proba(X)
+        
+    #     # Dynamic thresholds based on validation performance
+    #     buy_thresh = 0.5 # Lowered from default 0.3
+    #     sell_thresh = 0.4   # Increased from default 0.3
+        
+    #     for p in probs:
+    #         # More aggressive buying, more conservative selling
+    #         if p[2] > buy_thresh and p[0] < 0.05:  # Strong buy signal
+    #             signals.append(1)
+    #         elif p[0] > sell_thresh and p[2] < 0.05:  # Strong sell signal
+    #             signals.append(-1)
+    #         else:
+    #             signals.append(0)
+        
+    #     return np.array(signals)
+
+# ver3
     def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
         """
-        Generate trading signals with rolling window prediction
-        Uses strict threshold checks to avoid conflicting signals
+        Generate trading signals based on maximum probability class
+        Returns: 
+            -1 (Sell) if max probability is class 0 (Sell)
+            0 (Hold) if max probability is class 1 (Hold) 
+            1 (Buy) if max probability is class 2 (Buy)
         """
         signals = []
         probs = self.model.predict_proba(X)
         
-        for p in probs:
-            if p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
-                signals.append(1)  # Buy
-            elif p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
-                signals.append(-1)  # Sell
-            else:
-                signals.append(0)  # Hold
+        # print("\nPrediction Probabilities:")
+        # print("="*40)
+        # print("Sell (0)\tHold (1)\tBuy (2)\t\tPredicted Class")
+        # print("-"*60)
         
+        for i, p in enumerate(probs):
+            max_class = np.argmax(p)  # Get the class with highest probability
+            
+            # Print probabilities with class labels
+            print(f"{p[0]:.4f}\t\t{p[1]:.4f}\t\t{p[2]:.4f}\t\t{max_class} ({'Sell' if max_class==0 else 'Hold' if max_class==1 else 'Buy'})")
+            
+            if max_class == 0:    # Sell class
+                signals.append(-1)
+            elif max_class == 1:  # Hold class
+                signals.append(0)
+            elif max_class == 2:  # Buy class
+                signals.append(1)
+            else:
+                signals.append(0)  # Default to hold if unexpected case
+        
+        # print("="*40 + "\n")
         return np.array(signals)
 
     def rolling_window_predict(self, df):

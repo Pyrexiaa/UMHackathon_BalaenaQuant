@@ -145,69 +145,125 @@ class XGBoostModel(BaseModel):
             self.optimal_buy_thresh = 0.5
             self.optimal_sell_thresh = 0.5
 
+    # def predict(self, data: pd.DataFrame, threshold: float = None) -> np.ndarray:
+    #     """
+    #     Predict trading signals from input data using the XGBoost model.
+
+    #     :param data: Raw input data as a DataFrame
+    #     :param threshold: Optional threshold for buy/sell signals
+    #     :return: Array of trading signals
+    #     """
+    #     if threshold is None:
+    #         threshold = BaseConfig.THRESHOLD
+        
+    #     df_feat = self.prepare_features(data)
+    #     if df_feat.empty:
+    #         return np.array([])
+    #     if not hasattr(self.scaler, 'mean_'):
+    #         self.scaler.fit(df_feat)
+
+    #     df_scaled = self.normalize(df_feat)
+
+    #     # If parameters not optimized yet, use default threshold
+    #     if self.optimal_buy_thresh is None or self.optimal_sell_thresh is None:
+    #         probs = self.model.predict_proba(df_scaled)
+    #         signals = []
+    #         for p in probs:
+    #             # if p[2] > threshold:
+    #             #     signals.append(1)   # Buy
+    #             # elif p[0] > threshold:
+    #             #     signals.append(-1)  # Sell
+    #             # else:
+    #             #     signals.append(0)   # Hold
+    #             if p[2] > threshold and p[0] <= threshold:
+    #                 signals.append(1)  # Buy (class 2 prob high, sell prob low)
+    #             elif p[0] > threshold and p[2] <= threshold:
+    #                 signals.append(-1)  # Sell (class 0 prob high, buy prob low)
+    #             else:
+    #                 signals.append(0)  # Hold (neither condition met)
+    #     else:
+    #         # Use optimized parameters
+    #         if self.optimal_window is not None and len(df_scaled) > self.optimal_window:
+    #             # Get the most recent window of data
+    #             window_data = df_scaled[-self.optimal_window:]
+    #             # Retrain on the window (optional - could just predict)
+    #             # self.model.fit(window_data, ...) if we had targets
+    #             probs = self.model.predict_proba(window_data)
+    #         else:
+    #             probs = self.model.predict_proba(df_scaled)
+                
+    #         signals = []
+    #         for p in probs:
+    #             # if p[0] > self.optimal_buy_thresh and p[2] <= self.optimal_sell_thresh:
+    #             #     signals.append(1)   # Buy
+    #             # elif p[2] > self.optimal_sell_thresh and p[0] <= self.optimal_buy_thresh:
+    #             #     signals.append(-1)  # Sell
+    #             # else:
+    #             #     signals.append(0)   # Hold
+                
+    #             if p[2] > 0.5 and p[0] <= 0.05:
+    #                 signals.append(1)   # Buy
+    #             elif p[0] > 0.4 and p[2] <= 0.05:
+    #                 signals.append(-1)  # Sell
+    #             else:
+    #                 signals.append(0)   # Hold
+
+    #     # Padding for warmup period (if needed)
+    #     padding = len(data) - len(signals)
+    #     if padding > 0:
+    #         signals = [0] * padding + signals
+
+    #     return np.array(signals)
+
+    # ver 3
     def predict(self, data: pd.DataFrame, threshold: float = None) -> np.ndarray:
         """
         Predict trading signals from input data using the XGBoost model.
+        Uses maximum probability class for signal generation:
+            -1 (Sell) if max is class 0
+            0 (Hold) if max is class 1 
+            1 (Buy) if max is class 2
 
         :param data: Raw input data as a DataFrame
-        :param threshold: Optional threshold for buy/sell signals
+        :param threshold: Unused parameter (kept for backward compatibility)
         :return: Array of trading signals
         """
-        if threshold is None:
-            threshold = BaseConfig.THRESHOLD
-        
         df_feat = self.prepare_features(data)
         if df_feat.empty:
             return np.array([])
+        
+        # Ensure scaler is fitted
         if not hasattr(self.scaler, 'mean_'):
             self.scaler.fit(df_feat)
 
         df_scaled = self.normalize(df_feat)
-
-        # If parameters not optimized yet, use default threshold
-        if self.optimal_buy_thresh is None or self.optimal_sell_thresh is None:
-            probs = self.model.predict_proba(df_scaled)
-            signals = []
-            for p in probs:
-                # if p[2] > threshold:
-                #     signals.append(1)   # Buy
-                # elif p[0] > threshold:
-                #     signals.append(-1)  # Sell
-                # else:
-                #     signals.append(0)   # Hold
-                if p[2] > threshold and p[0] <= threshold:
-                    signals.append(1)  # Buy (class 2 prob high, sell prob low)
-                elif p[0] > threshold and p[2] <= threshold:
-                    signals.append(-1)  # Sell (class 0 prob high, buy prob low)
-                else:
-                    signals.append(0)  # Hold (neither condition met)
-        else:
-            # Use optimized parameters
-            if self.optimal_window is not None and len(df_scaled) > self.optimal_window:
-                # Get the most recent window of data
-                window_data = df_scaled[-self.optimal_window:]
-                # Retrain on the window (optional - could just predict)
-                # self.model.fit(window_data, ...) if we had targets
-                probs = self.model.predict_proba(window_data)
+        
+        # Get probabilities and find max class
+        probs = self.model.predict_proba(df_scaled)
+        signals = []
+        
+        for p in probs:
+            max_class = np.argmax(p)  # Get index of highest probability
+            
+            if max_class == 0:    # Sell class
+                signals.append(-1)
+            elif max_class == 1:  # Hold class
+                signals.append(0)
+            elif max_class == 2:  # Buy class
+                signals.append(1)
             else:
-                probs = self.model.predict_proba(df_scaled)
-                
-            signals = []
-            for p in probs:
-                # if p[0] > self.optimal_buy_thresh and p[2] <= self.optimal_sell_thresh:
-                #     signals.append(1)   # Buy
-                # elif p[2] > self.optimal_sell_thresh and p[0] <= self.optimal_buy_thresh:
-                #     signals.append(-1)  # Sell
-                # else:
-                #     signals.append(0)   # Hold
-                
-                if p[2] > self.optimal_buy_thresh and p[0] <= self.optimal_sell_thresh:
-                    signals.append(1)   # Buy
-                elif p[0] > self.optimal_sell_thresh and p[2] <= self.optimal_buy_thresh:
-                    signals.append(-1)  # Sell
-                else:
-                    signals.append(0)   # Hold
-
+                signals.append(0)  # Fallback to hold
+        
+        # # Optional: Print probabilities for debugging
+        # if self.debug:
+        #     print("\nPrediction Probabilities:")
+        #     print("="*40)
+        #     print("Sell (0)\tHold (1)\tBuy (2)\t\tPredicted Class")
+        #     print("-"*60)
+        #     for i, p in enumerate(probs[-5:]):  # Print last 5 predictions
+        #         print(f"{p[0]:.4f}\t\t{p[1]:.4f}\t\t{p[2]:.4f}\t\t{max_class} ({'Sell' if max_class==0 else 'Hold' if max_class==1 else 'Buy'})")
+        #     print("="*40 + "\n")
+        
         # Padding for warmup period (if needed)
         padding = len(data) - len(signals)
         if padding > 0:
@@ -225,59 +281,3 @@ class XGBoostModel(BaseModel):
         
         # Optimize parameters after initial fit
         self.optimize_parameters(X, y)
-
-
-    '''
-    sample script 
-    '''
-
-    # if __name__ == "__main__":
-    #     import sys
-    #     import warnings
-    #     warnings.filterwarnings("ignore")
-
-    # # Load the dataset
-    # csv_path = Path(__file__).resolve().parents[3] / "experimental" / "datasets" / "btc_data_with_target_modified.csv"
-    # if not csv_path.exists():
-    #     print(f"CSV file not found at {csv_path}")
-    #     sys.exit(1)
-
-    # df = pd.read_csv(csv_path)
-
-    # # Define config values manually (or mock BaseConfig for testing)
-    # class MockBaseConfig:
-    #     BUY_THRESHOLD = 0.7
-    #     SELL_THRESHOLD = 0.3
-    #     BUY_SIGNAL = 1
-    #     SELL_SIGNAL = -1
-    #     HOLD_SIGNAL = 0
-
-
-    # # Inject temporary config for testing
-    # BaseConfig.BUY_THRESHOLD = MockBaseConfig.BUY_THRESHOLD
-    # BaseConfig.SELL_THRESHOLD = MockBaseConfig.SELL_THRESHOLD
-    # BaseConfig.BUY_SIGNAL = MockBaseConfig.BUY_SIGNAL
-    # BaseConfig.SELL_SIGNAL = MockBaseConfig.SELL_SIGNAL
-    # BaseConfig.HOLD_SIGNAL = MockBaseConfig.HOLD_SIGNAL
-
-    # # Define test features and target manually if needed
-    # if not hasattr(XGBConfig, 'XGB_FEATURE_PATH') or isinstance(XGBConfig.XGB_FEATURE_PATH, str):
-    #     # Assuming a column named 'target' exists
-    #     XGBConfig.XGB_FEATURE_PATH = [col for col in df.columns if col != "target"]
-
-    # # Initialize model
-    # model = XGBoostModel()
-
-    # # Run training & prediction test
-    # print("Running basic training and prediction test...")
-
-    # # Use a small subset for fast testing
-    # df_subset = df.dropna().tail(300)
-    # X, y = model.prepare_features(df_subset, "target")
-    # X_scaled = model.preprocess(X)
-    # model.train(X_scaled, y)
-    # probs = model.predict(X)
-    # signals = model.apply_thresholds(probs)
-
-    # print("Sample predictions (first 10 signals):", signals[:10])
-
