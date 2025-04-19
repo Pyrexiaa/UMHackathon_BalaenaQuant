@@ -1,12 +1,53 @@
-import pickle
-from typing import Optional, Union, List
-
+from typing import List
 import numpy as np
 import pandas as pd
 from hmmlearn import hmm
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
 
+def plot_hmm_aic_bic(ori_df: pd.DataFrame, feature_cols: list, max_components: int = 10, n_iter=2000):
+    df = ori_df.copy()
+    scaler = StandardScaler()
+    df[feature_cols] = scaler.fit_transform(df[feature_cols])
+    X = df[feature_cols].dropna().values
+    
+    aic = []
+    bic = []
+    lls = []
+    # start from 2
+    ns = range(2, max_components + 1)
+    for n in ns:
+        best_ll = None
+        best_model = None
+        for i in range(10):
+            h = hmm.GaussianHMM(n, n_iter=n_iter, covariance_type='full', random_state=42)
+            
+            h.fit(X)
+            score = h.score(X)
+            if not best_ll or best_ll < score:
+                best_ll = score
+                best_model = h
+        aic.append(best_model.aic(X))
+        bic.append(best_model.bic(X))
+        lls.append(best_model.score(X))
+        
+    fig, ax = plt.subplots()
+    ln1 = ax.plot(ns, aic, label="AIC", color="blue", marker="o")
+    ln2 = ax.plot(ns, bic, label="BIC", color="green", marker="o")
+    ax2 = ax.twinx()
+    ln3 = ax2.plot(ns, lls, label="LL", color="orange", marker="o")
+
+    ax.legend(handles=ax.lines + ax2.lines)
+    ax.set_title("Using AIC/BIC for Model Selection")
+    ax.set_ylabel("Criterion Value (lower is better)")
+    ax2.set_ylabel("LL (higher is better)")
+    ax.set_xlabel("Number of HMM Components")
+    ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    fig.tight_layout()
+
+    plt.show()
+        
 
 def add_hmm_features(
     ori_df: pd.DataFrame, 
@@ -54,6 +95,38 @@ def add_hmm_features(
     df['hmm_state'] = hidden_states
 
     return df
+
+def plot_kmeans_clusters_elbow(
+    ori_df: pd.DataFrame, 
+    feature_cols: List[str], 
+    max_clusters: int = 10,
+):
+    """
+    Plot the elbow method for KMeans clustering to determine the optimal number of clusters.
+
+    :param df: Input DataFrame.
+    :param feature_cols: Columns to use for clustering.
+    :param max_clusters: Maximum number of clusters to test.
+    """
+    df = ori_df.copy()
+    # Standardize the features
+    scaler = StandardScaler()
+    df[feature_cols] = scaler.fit_transform(df[feature_cols])
+    X = df[feature_cols].dropna().values
+    
+    # Fit KMeans and calculate inertia for different cluster sizes
+    sum_of_squared_distances = []
+    K = range(1, max_clusters + 1)
+    for num_clusters in K:
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        kmeans.fit(X)
+        sum_of_squared_distances.append(kmeans.inertia_)
+    plt.plot(K, sum_of_squared_distances, 'bx-')
+    plt.xlabel('Values of K')
+    plt.ylabel('Sum of squared distances/Inertia')
+    plt.title('Elbow Method For Optimal k')
+    plt.show()
+    
 
 def add_rolling_kmeans_cluster_feature(df: pd.DataFrame, 
                                        feature_cols: List[str], 
