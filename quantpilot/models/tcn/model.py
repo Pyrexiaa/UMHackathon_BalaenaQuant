@@ -127,6 +127,13 @@ class TCNModel(BaseModel):
             else:
                 signals.append(0)  # Hold
             
+            # if p[2] > threshold and p[0] <= threshold:
+            #     signals.append(1)  # Buy
+            # elif p[0] > threshold and p[2] <= threshold:
+            #     signals.append(-1)  # Sell
+            # else:
+            #     signals.append(0)  # Hold
+            
         return np.array(signals)
     
     def fit(self, X: pd.DataFrame, y: pd.Series):
