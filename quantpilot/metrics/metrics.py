@@ -6,18 +6,22 @@ import pandas as pd
 class Metrics(BaseMetrics):
     def total_return(self):
         """Total return over the entire period."""
-        if self.equity.iloc[0] == 0:
-            return np.nan
-        return self.equity.iloc[-1] / self.equity.iloc[0] - 1
+        if self.mode == "arithmetic":
+            return self.equity[-1]
+        elif self.mode == "geometric":
+            if self.equity.iloc[0] == 0:
+                return np.nan
+            return self.equity.iloc[-1] / self.equity.iloc[0] - 1
 
     def annualized_return(self):
         """Compounded Annual Growth Rate (CAGR)."""
-        if self.equity.iloc[0] == 0:
-            return np.nan
-        periods_per_year = 365  # Use 365 for daily bars, adjust for other timeframes
+        start_date = self.equity.index[0]
+        end_date = self.equity.index[-1]
+        diff = end_date - start_date
+        n_years = diff.days / 365.0
         total_ret = self.total_return()
-        n_years = len(self.returns) / periods_per_year
-        return (1 + total_ret) ** (1 / n_years) - 1
+        
+        return ((1 + total_ret) ** (1 / n_years)) - 1
 
     def annualized_volatility(self):
         """Standard deviation of returns, annualized."""
@@ -97,10 +101,10 @@ class Metrics(BaseMetrics):
     def all_metrics(self):
         metrics = {}
         
-        if self.mode == "geometric":
-            metrics['Total Return'] = self.total_return()
-            metrics['Annualized Return'] = self.annualized_return()
-            metrics['Calmar Ratio'] = self.calmar_ratio()
+        # if self.mode == "geometric":
+        metrics['Total Return'] = self.total_return()
+        metrics['Annualized Return'] = self.annualized_return()
+        metrics['Calmar Ratio'] = self.calmar_ratio()
 
         # Add other metrics (they will always be included)
         metrics['Sharpe Ratio'] = self.sharpe_ratio()
