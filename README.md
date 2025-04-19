@@ -143,7 +143,8 @@ Trade Frequency               0.12
 ## 📚 Documentation
 Full documentation and user guides can be found in [QuantPilot Docs](https://quantpilot.gitbook.io/docs).
 
-
+## 💬 Presentation Slides
+Presentation slides can be found in [QuantPilot Presentation Slides](https://drive.google.com/file/d/1YOGjI-EWwku-vKG7lopjhlScbOxvb3KJ/view?usp=sharing).
 
 
 
