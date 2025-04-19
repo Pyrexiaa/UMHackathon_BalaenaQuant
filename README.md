@@ -33,14 +33,15 @@ pip install -e .
 QuantPilot/
 │
 ├── docs/                               # Documentation resources
-│   └── backtesting.md                  # User guide for running the backtester
+│   └── api_reference/                  # Reference documentation for library classes and functions
+│   └── tutorials/                      # Step-by-step user guides and examples for using the library
 │
 ├── examples/                           # Example scripts demonstrating how to use the backtester
-│   └── simple_backtesting.py           # A simple example of a strategy backtest
+│   └── single_backtesting.py           # A simple example of a strategy backtest
 │
 ├── experimental/                       # Experimental modules and in-development features
 │
-├── quantpilot/                                # Main source code for the QuantPilot system
+├── quantpilot/                         # Main source code for the QuantPilot system
 │   ├── data/                           # Data loading and preprocessing utilities
 │   │   ├── api/                        # External API integrations (e.g., price feeds)
 │   │   └── loader/                     # Functions to load and prepare data from various sources
