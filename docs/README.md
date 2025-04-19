@@ -4,13 +4,15 @@
 * [Quickstart](../README.md)
 
 ### Examples
-* [Examples](../examples)
+* [How to run backtest on single strategy](./tutorials/run_single_backtest.md)
+* [How to run backtest on multiple strategies](./tutorials/run_multi_backtest.md)
+* [How to add custom model](./tutorials/add_custom_model.md)
 
 ### API Reference
-* [Backtester](./backtesting.md)
-* [Data Ingestion](./data.md)
-* [Feature Engineering](./feature_engineering.md)
-* [Metrics](./metrics.md)
-* [Models](./models.md)
-* [Models Weights](./models_weights.md)
+* [Backtester](./api_reference/backtesting.md)
+* [Data Ingestion](./api_reference/data.md)
+* [Feature Engineering](./api_reference/feature_engineering.md)
+* [Metrics](./api_reference/metrics.md)
+* [Models](./api_reference/models.md)
+* [Models Weights](./api_reference/models_weights.md)
 
