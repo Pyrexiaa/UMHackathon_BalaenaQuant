@@ -1,14 +1,14 @@
 class BaseConfig:
     FEE_RATE = 0.0006
     THRESHOLD = 0.30
-    WINDOW_SIZE = 4
+    WINDOW_SIZE = 120
 
 
 class TCNConfig:
     TCN_MODEL_PATH = "quantpilot/models_weights/tcn/checkpoint.pt"
     # TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
     # TCN_MODEL_PATH = "quantpilot/models_weights/tcn/model.pth"
-    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaler.pkl"
+    TCN_SCALER_PATH = "quantpilot/models_weights/tcn/scaling_values.pkl"
 
 
 class XGBConfig:
@@ -47,8 +47,8 @@ class CNNConfig:
 
 class GNNConfig:
     HIDDEN_FEATURES = 4
-    GNN_MODEL_PATH = "quantpilot/models_weights/gnn/model.pth"
-    GNN_SCALER_PATH = "quantpilot/models_weights/gnn/scaler.pkl"
+    GNN_MODEL_PATH = "quantpilot/models_weights/gnn/checkpoint.pt"
+    GNN_SCALER_PATH = "quantpilot/models_weights/gnn/scaling_values.pkl"
 
 
 class TabNetConfig:
