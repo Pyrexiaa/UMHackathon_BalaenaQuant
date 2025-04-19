@@ -101,9 +101,11 @@ model = self.model.fit(X_train)
 
 ### Supported Models for NOW
 
-| Method  | Description |
-| ------------- | ---------------|
-| XGBoost                                | Uses mutual information regression to rank features based on dependency with the target. |
-| Temporal Convolutional Network (TCN)   | Employs dilated causal convolutions for time series classification.                              |
-| Convolutional Neural Network (CNN)     | Extracts local patterns from multi-feature time windows using 1D convolutions.                               |
-| Graph Neural Network (GNN)   | Leverages graph structure and correlation to learn feature interactions.                                |
+| Method                          | Description                                                                                   |
+|---------------------------------|-----------------------------------------------------------------------------------------------|
+| XGBoost                         | Uses mutual information regression to rank features based on dependency with the target.      |
+| TabNet                          | Utilizes sequential attention to select relevant features and learn sparse, interpretable representations. |
+| Temporal Convolutional Network (TCN) | Employs dilated causal convolutions for time series classification.                    |
+| Graph Neural Network (GNN)     | Leverages graph structure and correlation to learn feature interactions.                     |
+
+

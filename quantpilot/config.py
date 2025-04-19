@@ -16,10 +16,14 @@ class TabNetConfig:
     
 
 class XGBConfig:
+    # assumption 9 model
     XGB_MODEL_PATH = "quantpilot/models_weights/xgboost2/xgboost_model.pkl"
     XGB_SCALER_PATH = "quantpilot/models_weights/xgboost2/scaler.pkl"
-    # XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_assumption_8/xgboost_model.pkl"
-    # XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_assumption_8//scaler.pkl"
+    
+    # assumption 10 model
+    XGB_MODEL_PATH = "quantpilot/models_weights/xgboost_final/xgboost_model.pkl"
+    XGB_SCALER_PATH = "quantpilot/models_weights/xgboost_final/scaler.pkl"
+
     XGB_FEATURE_PATH = [
         "price_change_1",
         "ema_5_8_13_cross",

@@ -23,17 +23,13 @@ class XGBoostModel(BaseModel):
             self.model = model_data['model']
             self.scaler = model_data['scaler']
             self.features = [
-    'exchange_whale_ratio',
     'taker_buy_ratio',
-    'coinbase_premium_gap',
-    'coinbase_premium_index',
+    'taker_sell_ratio',
+    'coinbase_premium_gap_usdt_adjusted',
+    'coinbase_premium_index_usdt_adjusted',
     'exchange_supply_ratio',
-    'miner_supply_ratio',
     'addresses_count_active',
-    'addresses_count_outflow',
-    'transactions_count_outflow',
-    'tokens_transferred_total',
-    'short_liquidations',
+    'tokens_transferred_mean',
     'short_liquidations_usd',
     'long_liquidations',
     'long_liquidations_usd'
@@ -57,17 +53,13 @@ class XGBoostModel(BaseModel):
 
     def prepare_features(self, df):
         required_features = [
-    'exchange_whale_ratio',
     'taker_buy_ratio',
-    'coinbase_premium_gap',
-    'coinbase_premium_index',
+    'taker_sell_ratio',
+    'coinbase_premium_gap_usdt_adjusted',
+    'coinbase_premium_index_usdt_adjusted',
     'exchange_supply_ratio',
-    'miner_supply_ratio',
     'addresses_count_active',
-    'addresses_count_outflow',
-    'transactions_count_outflow',
-    'tokens_transferred_total',
-    'short_liquidations',
+    'tokens_transferred_mean',
     'short_liquidations_usd',
     'long_liquidations',
     'long_liquidations_usd'

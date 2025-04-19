@@ -11,11 +11,12 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from joblib import dump
 from sklearn.metrics import classification_report, balanced_accuracy_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 
 # Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest_v2.csv"
-MODEL_DIR = Path("quantpilot/models_weights/xgboost2")
+MODEL_DIR = Path("quantpilot/models_weights/xgboost_final")
 SCALING_PATH = MODEL_DIR / "scaler.pkl"
 
 # Configuration
@@ -28,19 +29,15 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 class XGBoostTradingModel:
     def __init__(self):
-        # Fixed 14-feature set matching ASSUMPTION_9
+        # Fixed 10-feature set matching ASSUMPTION_10
         self.features = [
-            'exchange_whale_ratio',
             'taker_buy_ratio',
-            'coinbase_premium_gap',
-            'coinbase_premium_index',
+            'taker_sell_ratio',
+            'coinbase_premium_gap_usdt_adjusted',
+            'coinbase_premium_index_usdt_adjusted',
             'exchange_supply_ratio',
-            'miner_supply_ratio',
             'addresses_count_active',
-            'addresses_count_outflow',
-            'transactions_count_outflow',
-            'tokens_transferred_total',
-            'short_liquidations',
+            'tokens_transferred_mean',
             'short_liquidations_usd',
             'long_liquidations',
             'long_liquidations_usd'
@@ -81,21 +78,26 @@ class XGBoostTradingModel:
         return scaled_df
 
     def train_model(self, X_train, y_train, X_val, y_val):
-        """Train with fixed parameters"""
-        params = {
+        """Optimized training with faster GridSearchCV"""
+        # Base parameters
+        base_params = {
             "objective": "multi:softprob",
             "num_class": 3,
-            "learning_rate": 0.01,
-            "max_depth": 4,
-            "n_estimators": 50,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "reg_alpha": 0.1,
-            "reg_lambda": 0.5,
-            "min_child_weight": 3,
-            "gamma": 0.1,
             "eval_metric": ["mlogloss", "merror"],
-            "early_stopping_rounds": 50,
+            "early_stopping_rounds": 20,
+            "random_state": 42,
+            "n_jobs": -1
+        }
+
+        # Optimized parameter grid
+        param_grid = {
+            'learning_rate': [0.05, 0.1],
+            'max_depth': [3, 4],
+            'n_estimators': [100],
+            'subsample': [0.8, 0.9],
+            'colsample_bytree': [0.8],
+            'gamma': [0, 0.1],
+            'min_child_weight': [1, 3],
         }
 
         # Class weights
@@ -103,13 +105,42 @@ class XGBoostTradingModel:
         weights = len(y_train) / (3 * class_counts)
         sample_weights = np.array([weights[label] for label in y_train])
 
-        self.model = XGBClassifier(**params)
+        # Time Series Cross-Validator
+        tscv = TimeSeriesSplit(n_splits=2)
+
+        # Initialize GridSearchCV
+        grid_search = GridSearchCV(
+            estimator=XGBClassifier(**base_params),
+            param_grid=param_grid,
+            scoring='balanced_accuracy',
+            cv=tscv,
+            n_jobs=-1,
+            verbose=1
+        )
+
+        print("\nStarting hyperparameter tuning...")
+        grid_search.fit(
+            X_train,
+            y_train,
+            eval_set=[(X_val, y_val)],
+            sample_weight=sample_weights,
+            verbose=5
+        )
+
+        print("\nBest parameters found:")
+        print(grid_search.best_params_)
+
+        # Store the trained model
+        self.model = grid_search.best_estimator_
+        
+        # Additional training with best params (optional)
+        print("\nFinal training with best parameters...")
         self.model.fit(
             X_train,
             y_train,
             eval_set=[(X_val, y_val)],
             sample_weight=sample_weights,
-            verbose=10,
+            verbose=10
         )
 
     def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
