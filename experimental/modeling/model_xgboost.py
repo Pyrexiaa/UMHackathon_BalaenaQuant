@@ -16,7 +16,7 @@ from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 # Constants
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "experimental/datasets/btc_data_with_target_latest_v2.csv"
-MODEL_DIR = Path("quantpilot/models_weights/xgboost_final_testing")
+MODEL_DIR = Path("quantpilot/models_weights/xgboost_final_1")
 SCALING_PATH = MODEL_DIR / "scaler.pkl"
 
 '''
@@ -216,59 +216,59 @@ class XGBoostTradingModel:
 
 
 # ver2 todo
-    # def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
-    #     signals = []
-    #     probs = self.model.predict_proba(X)
-        
-    #     # Dynamic thresholds based on validation performance
-    #     buy_thresh = 0.5 # Lowered from default 0.3
-    #     sell_thresh = 0.4   # Increased from default 0.3
-        
-    #     for p in probs:
-    #         # More aggressive buying, more conservative selling
-    #         if p[2] > buy_thresh and p[0] < 0.05:  # Strong buy signal
-    #             signals.append(1)
-    #         elif p[0] > sell_thresh and p[2] < 0.05:  # Strong sell signal
-    #             signals.append(-1)
-    #         else:
-    #             signals.append(0)
-        
-    #     return np.array(signals)
-
-# ver3
     def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
-        """
-        Generate trading signals based on maximum probability class
-        Returns: 
-            -1 (Sell) if max probability is class 0 (Sell)
-            0 (Hold) if max probability is class 1 (Hold) 
-            1 (Buy) if max probability is class 2 (Buy)
-        """
         signals = []
         probs = self.model.predict_proba(X)
         
-        # print("\nPrediction Probabilities:")
-        # print("="*40)
-        # print("Sell (0)\tHold (1)\tBuy (2)\t\tPredicted Class")
-        # print("-"*60)
+        # Dynamic thresholds based on validation performance
+        buy_thresh = 0.5 # Lowered from default 0.3
+        sell_thresh = 0.4   # Increased from default 0.3
         
-        for i, p in enumerate(probs):
-            max_class = np.argmax(p)  # Get the class with highest probability
-            
-            # Print probabilities with class labels
-            print(f"{p[0]:.4f}\t\t{p[1]:.4f}\t\t{p[2]:.4f}\t\t{max_class} ({'Sell' if max_class==0 else 'Hold' if max_class==1 else 'Buy'})")
-            
-            if max_class == 0:    # Sell class
-                signals.append(-1)
-            elif max_class == 1:  # Hold class
-                signals.append(0)
-            elif max_class == 2:  # Buy class
+        for p in probs:
+            # More aggressive buying, more conservative selling
+            if p[2] > buy_thresh and p[0] < 0.05:  # Strong buy signal
                 signals.append(1)
+            elif p[0] > sell_thresh and p[2] < 0.05:  # Strong sell signal
+                signals.append(-1)
             else:
-                signals.append(0)  # Default to hold if unexpected case
+                signals.append(0)
         
-        # print("="*40 + "\n")
         return np.array(signals)
+
+# ver3
+    # def predict_signals(self, X, window_size=BaseConfig.WINDOW_SIZE):
+    #     """
+    #     Generate trading signals based on maximum probability class
+    #     Returns: 
+    #         -1 (Sell) if max probability is class 0 (Sell)
+    #         0 (Hold) if max probability is class 1 (Hold) 
+    #         1 (Buy) if max probability is class 2 (Buy)
+    #     """
+    #     signals = []
+    #     probs = self.model.predict_proba(X)
+        
+    #     # print("\nPrediction Probabilities:")
+    #     # print("="*40)
+    #     # print("Sell (0)\tHold (1)\tBuy (2)\t\tPredicted Class")
+    #     # print("-"*60)
+        
+    #     for i, p in enumerate(probs):
+    #         max_class = np.argmax(p)  # Get the class with highest probability
+            
+    #         # Print probabilities with class labels
+    #         print(f"{p[0]:.4f}\t\t{p[1]:.4f}\t\t{p[2]:.4f}\t\t{max_class} ({'Sell' if max_class==0 else 'Hold' if max_class==1 else 'Buy'})")
+            
+    #         if max_class == 0:    # Sell class
+    #             signals.append(-1)
+    #         elif max_class == 1:  # Hold class
+    #             signals.append(0)
+    #         elif max_class == 2:  # Buy class
+    #             signals.append(1)
+    #         else:
+    #             signals.append(0)  # Default to hold if unexpected case
+        
+    #     # print("="*40 + "\n")
+    #     return np.array(signals)
 
     def rolling_window_predict(self, df):
         """Rolling window prediction with 120-period window"""

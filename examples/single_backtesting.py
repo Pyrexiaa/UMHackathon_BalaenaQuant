@@ -8,7 +8,7 @@ import pandas as pd
 if __name__ == "__main__":
     
     bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("xgboost")), strategy_name="XGBoost",
-                    mode="arithmetic", entry_exit_logic="mean_reversion")
+                    mode="geometric", entry_exit_logic="mean_reversion")
     # bt = Backtester(data=BTC_DATA, strategy=MLStrategy(get_model("TCN")),
     #             mode="geometric", entry_exit_logic="mean_reversion")
     
@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     bt.plot_results()
    
-    # run_dashboard()
+    run_dashboard()
     
 
     
@@ -37,7 +37,8 @@ if __name__ == "__main__":
 #     # Run backtest and forward test
 #     # bt = Backtester(data=BTC_DATA, strategy=TargetStrategy(),
 #     #                 mode="arithmetic", entry_exit_logic="trend_following")
-#     bt = Backtester(data=BTC_DATA, strategy=TargetStrategy(),
+#     bt = Backtester(data=BTC_DATA, strategy=TargetStrategy(), strategy_name= "TargetStrategy",
 #                 mode="geometric", entry_exit_logic="mean_reversion")
 #     bt.run(forward_test=True, forward_start_date="2024-01-01")
 #     bt.plot_results()
+#     run_dashboard()
