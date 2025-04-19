@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore")
 OUTPUT_DIR = "output"
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'Strategy1', initial_capital: float = 100000,
+    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str, initial_capital: float = 100000,
                  risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1,
                  mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following', threshold: float = None):
         """
