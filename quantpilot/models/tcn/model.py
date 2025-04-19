@@ -129,9 +129,9 @@ class TCNModel(BaseModel):
             #     signals.append(-1) # Sell
 
             # Apply threshold rules
-            if p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
+            if p[0] > threshold and p[2] <= threshold:
                 signals.append(1)  # Buy
-            elif p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
+            elif p[2] > threshold and p[0] <= threshold:
                 signals.append(-1)  # Sell
             else:
                 signals.append(0)  # Hold
