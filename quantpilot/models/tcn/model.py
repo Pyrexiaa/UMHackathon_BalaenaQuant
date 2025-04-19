@@ -72,13 +72,17 @@ class TCNModel(BaseModel):
             X.append(window)
         return np.array(X)
 
-    def predict(self, data):
+    def predict(self, data, threshold: float = None):
         """
         Make predictions based on raw input data.
 
         :param data: Raw input data as a DataFrame
+        :param threshold: Optional threshold for buy/sell signals
         :return: Numpy array of predicted signals
         """
+        if threshold is None:
+            threshold = BaseConfig.THRESHOLD
+        
         df_feat = self.prepare_features(data)
         df_scaled = self.normalize(df_feat)
         X = self.preprocess(df_scaled)
@@ -109,13 +113,26 @@ class TCNModel(BaseModel):
             if i >= total_len:
                 break  # Handle case where we have extra predictions
             p = np.array(p)
+
+            # if p[2] > threshold:
+            #     signals.append(1)  # Buy
+            # elif p[0] > threshold:
+            #     signals.append(-1) # Sell
+
             # Apply threshold rules
-            if p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
+            if p[0] > threshold and p[2] <= threshold:
                 signals.append(1)  # Buy
-            elif p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
+            elif p[2] > threshold and p[0] <= threshold:
                 signals.append(-1)  # Sell
             else:
                 signals.append(0)  # Hold
+            
+            # if p[2] > threshold and p[0] <= threshold:
+            #     signals.append(1)  # Buy
+            # elif p[0] > threshold and p[2] <= threshold:
+            #     signals.append(-1)  # Sell
+            # else:
+            #     signals.append(0)  # Hold
             
         return np.array(signals)
     

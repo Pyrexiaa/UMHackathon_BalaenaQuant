@@ -6,6 +6,7 @@ from quantpilot.strategy import MLStrategy
 from quantpilot.models import get_model
 from quantpilot.features import add_hmm_features, add_nlp_sentiment_score
 import pandas as pd
+from quantpilot.visualization.run import run_dashboard
 
 async def main():
     loader = DataLoader()
@@ -22,9 +23,10 @@ async def main():
     df = add_hmm_features(df)
     df = add_nlp_sentiment_score(df)
     
-    bt = Backtester(data=df, strategy=MLStrategy(get_model("TCN")))
+    bt = Backtester(data=df, strategy=MLStrategy(get_model("TCN")), strategy_name="TCN")
     bt.run(forward_test=True, forward_start_date="2024-01-01")
-    bt.plot_results()
+    # bt.plot_results()
+    run_dashboard()
 
 if __name__ == "__main__":
     asyncio.run(main())

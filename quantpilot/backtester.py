@@ -14,9 +14,9 @@ warnings.filterwarnings("ignore")
 OUTPUT_DIR = "output"
 
 class Backtester:
-    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str = 'Strategy1', initial_capital: float = 100000,
+    def __init__(self, data: pd.DataFrame, strategy: BaseStrategy, strategy_name: str, initial_capital: float = 100000,
                  risk_free_rate: float = 0.0, trading_fee: float = 0.0006, qty_per_trade: int = 1,
-                 mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following'):
+                 mode: str = 'arithmetic', entry_exit_logic: str = 'trend_following', threshold: float = None):
         """
         Initialize the backtester with strategy, data, and configuration.
 
@@ -28,6 +28,7 @@ class Backtester:
         :param qty_per_trade: Number of shares per trade
         :param mode: Mode of calculation ('arithmetic' or 'geometric')
         :param entry_exit_logic: Entry and exit logic ('trend_following' or 'mean_reversion')
+        :param threshold: Optional threshold for signal generation
         """
         self.data = data
         self.strategy = strategy 
@@ -42,6 +43,7 @@ class Backtester:
         self.metrics = None
         self.mode = mode
         self.entry_exit_logic = entry_exit_logic
+        self.threshold = threshold
         
         # create output directory if not exits
         if not os.path.exists(OUTPUT_DIR):
@@ -195,6 +197,7 @@ class Backtester:
         Run a single phase (backtest or forward test) of the strategy.
 
         :param data: DataFrame with historical price data
+        :param threshold: Optional threshold for signal generation
         :return: Tuple of (portfolio_results, trades_dataframe, records_dataframe)
         """
         if self.mode not in ['arithmetic', 'geometric']:
@@ -205,7 +208,10 @@ class Backtester:
             portfolio = pd.DataFrame(index=data.index)
             portfolio['price'] = data['close']
             portfolio['price_change'] = data['close'].pct_change().fillna(0)
-            portfolio['signal'] = self.strategy.generate_signals(data)
+            if self.threshold is None:
+                portfolio['signal'] = self.strategy.generate_signals(data)
+            else:
+                portfolio['signal'] = self.strategy.generate_signals(data, threshold=self.threshold)
             if self.entry_exit_logic == 'trend_following':
                 print("Entry/Exit Logic: Trend Following")
                 portfolio['position'] = portfolio['signal'].replace(0, pd.NA).ffill().fillna(0)  # forward fill previous position
