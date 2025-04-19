@@ -3,7 +3,7 @@
 ### Getting Started
 * [Quickstart](../README.md)
 
-### Examples
+### Tutorials
 * [How to run backtest on single strategy](./tutorials/run_single_backtest.md)
 * [How to run backtest on multiple strategies](./tutorials/run_multiple_backtest.md)
 * [How to run complete backtesting pipeline](./tutorials/run_complete_pipeline.md)
