@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-from experimental.modeling.constants import ASSUMPTION_9
+from experimental.modeling.constants import ASSUMPTION_10, ASSUMPTION_9
 import joblib
 import numpy as np
 from ..base_model import BaseModel
@@ -33,8 +33,8 @@ class TCNModel(BaseModel):
             else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         )
 
-        input_features = 14  # Specify your input features
-        num_channels = [64, 64, 128]  # Example for TCN channels
+        input_features = 10  # Specify your input features
+        num_channels = [128, 64, 128]  # Example for TCN channels
         self.model = TCNClassifier(input_features, 3, num_channels).to(self.device)
         self.model.load_state_dict(
             torch.load(model_path, map_location=self.device)["model_state"]
@@ -49,7 +49,7 @@ class TCNModel(BaseModel):
         :return: DataFrame with engineered features
         """
 
-        features = ASSUMPTION_9.copy()
+        features = ASSUMPTION_10.copy()
         if "target" in features:
             features.remove("target")
 
@@ -129,14 +129,31 @@ class TCNModel(BaseModel):
             #     signals.append(-1) # Sell
 
             # Apply threshold rules
-            if p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
+            if p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
                 signals.append(1)  # Buy
-            elif p[0] > BaseConfig.THRESHOLD and p[2] <= BaseConfig.THRESHOLD:
+            elif p[2] > BaseConfig.THRESHOLD and p[0] <= BaseConfig.THRESHOLD:
                 signals.append(-1)  # Sell
             else:
                 signals.append(0)  # Hold
 
-        return np.array(signals)
+        # for i, p in enumerate(probs):
+        #     max_class = np.argmax(p)  # Get the class with highest probability
+            
+        #     # Print probabilities with class labels
+        #     print(f"{p[0]:.4f}\t\t{p[1]:.4f}\t\t{p[2]:.4f}\t\t{max_class} ({'Sell' if max_class==0 else 'Hold' if max_class==1 else 'Buy'})")
+            
+        #     if max_class == 0:    # Sell class
+        #         signals.append(-1)
+        #     elif max_class == 1:  # Hold class
+        #         signals.append(0)
+        #     elif max_class == 2:  # Buy class
+        #         signals.append(1)
 
+            
+        df_probs = pd.DataFrame(probs, columns=['prob_sell', 'prob_hold', 'prob_buy'])
+        df_probs['predicted_signal'] = signals[start_idx:]
+        df_probs.to_csv("latest_tcn_predicted_signals.csv", index=False)
+        return np.array(signals)
+    
     def fit(self, X: pd.DataFrame, y: pd.Series):
         self.model.fit(X, y)
