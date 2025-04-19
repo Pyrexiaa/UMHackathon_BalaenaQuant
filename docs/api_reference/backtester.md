@@ -125,9 +125,9 @@ generate_signals(data: pd.DataFrame) -> pd.Series
 ```
 
 #### Return values:
-- `2` → Buy
-- `0` → Sell
-- `1` → Hold
+- `-1` → Sell
+- `0` → Hold
+- `1` → Buy
 
 ---
 

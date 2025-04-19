@@ -7,11 +7,18 @@ With a composable architecture and seamless component integration, QuantPilot em
 
 
 ## 🔑 Key Features
-- Plug-and-Play Architecture – Effortlessly integrate models, features, metrics, and more.
-- Modular and Composable Design – Construct fully customizable pipelines to suit your research workflows.
-- Backtesting & Forward Testing – Validate strategies with historical data and live-simulated environments.
-- ML-Ready Integration – Built-in support for training, evaluating, and deploying ML-based models.
+- 🔌  **Plug-and-Play Architecture** – Seamlessly integrate custom models, features, metrics, and components with minimal configuration.
 
+- 🧱 **Modular and Composable Design** – Build fully customizable and reusable pipelines tailored to your research and development workflows.
+- 🤖 **Machine Learning Ready** – Native support for training, validating, and fine-tuning machine learning models within your strategy framework.
+
+- 🔁 **Backtesting & Forward Testing** – Robust evaluation tools for both historical simulations and forward-looking performance testing in pseudo-live environments.
+
+- 📊 **Interactive Visualization** - Intuitive dashboard to explore backtest and forward test results, strategy signals, and comparative performance metrics.
+
+- ⚙️ **Flexible Strategy Execution** - Easily run single or multiple strategies concurrently, with support for various backtesting modes (e.g., geometric, arithmetic).
+
+- 🧠 **Advanced Feature Engineering** - Powerful tools for statistical feature selection, regime detection using Hidden Markov Models, and clustering with K-Means.
 
 ## Getting Started
 Prerequisites:

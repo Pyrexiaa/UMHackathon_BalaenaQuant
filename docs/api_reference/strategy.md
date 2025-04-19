@@ -42,9 +42,9 @@ A pandas.Series of integer trading signals:
 
 |Signal|	Action|	
 | ----------- | ----------- 
-|2 | Buy|
-|1 | Hold|
-|0 | Sell|
+|1 | Buy|
+|0 | Hold|
+|-1 | Sell|
 
 
 
@@ -56,11 +56,11 @@ A pandas.Series of integer trading signals:
 
     3. Applies thresholds:
 
-        If Buy probability > buy_threshold → Buy (2)
+        If Buy probability > buy_threshold → Buy (1)
 
-        If Sell probability > sell_threshold → Sell (0)
+        If Sell probability > sell_threshold → Sell (-1)
 
-        Else → Hold (1)
+        Else → Hold (0)
 
     4. Handles prediction alignment:
 
